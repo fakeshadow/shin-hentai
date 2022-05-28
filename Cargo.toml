@@ -1,0 +1,10 @@
+[package]
+name = "shin-hentai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.18.0"
+image = "0.24.2"
+rfd = "0.8.2"
+zip = { version = "0.6.2" }
