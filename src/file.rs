@@ -47,30 +47,39 @@ impl _File {
         direction: Direction,
     ) -> Result<(), Error> {
         match *self {
-            Self::File(ref mut file) => {
-                match direction {
-                    Direction::Next => {
-                        while *idx < file.len() {
-                            if file.by_index(*idx)?.is_file() {
-                                break;
-                            }
-                            *idx += 1;
-                        }
-                    }
-                    Direction::Prev => {
-                        while *idx > 0 {
-                            if file.by_index(*idx)?.is_file() {
-                                break;
-                            }
-                            *idx -= 1;
-                        }
-                    }
-                }
+            Self::File(ref mut zip) => match direction {
+                Direction::Next => loop {
+                    let len = zip.len();
+                    let mut file = zip.by_index(*idx)?;
 
-                let mut file = file.by_index(*idx)?;
-                buf.reserve(file.size() as usize);
-                file.read_to_end(buf)?;
-            }
+                    if file.is_file() {
+                        buf.reserve(file.size() as usize);
+                        file.read_to_end(buf)?;
+                        return Ok(());
+                    }
+
+                    *idx += 1;
+
+                    if *idx == len {
+                        break;
+                    }
+                },
+                Direction::Prev => loop {
+                    let mut file = zip.by_index(*idx)?;
+
+                    if file.is_file() {
+                        buf.reserve(file.size() as usize);
+                        file.read_to_end(buf)?;
+                        return Ok(());
+                    }
+
+                    if *idx == 0 {
+                        break;
+                    } else {
+                        *idx -= 1;
+                    }
+                },
+            },
             Self::Path(ref path) => {
                 let mut file = fs::File::open(&path[*idx])?;
 
