@@ -3,9 +3,13 @@
 mod app;
 mod error;
 mod file;
+mod icon;
 
 fn main() {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        icon_data: Some(icon::icon()),
+        ..Default::default()
+    };
 
     eframe::run_native(
         "maji hentai",
