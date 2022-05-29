@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use eframe::epaint::ColorImage;
 use eframe::{
-    egui::{CentralPanel, Context, Key, TextureHandle, TopBottomPanel, Ui, Window},
+    egui::{CentralPanel, ColorImage, Context, Key, TextureHandle, TopBottomPanel, Ui, Window},
     App, Frame,
 };
 
@@ -112,7 +111,7 @@ impl MyApp {
                 ui.visuals_mut().button_frame = false;
                 ui.menu_button("💻 Menu", |ui| {
                     ui.set_style(ui.ctx().style());
-                    if ui.button("💻 Open").clicked() {
+                    if ui.button("📂 Open").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
                             if let Err(e) = self.try_open(&path, ui.ctx()) {
                                 self.set_error(e);

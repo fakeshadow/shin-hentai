@@ -19,5 +19,5 @@ a simple comic viewer
 
 ## Control:
 - drag and drop zip file to start viewing.
-- `W` and `S` key for previous and next page.
+- `w` and `s` key for previous and next page.
 - Mouse scroll can be used for navigate between page too.
