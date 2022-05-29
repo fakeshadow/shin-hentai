@@ -1,59 +1,34 @@
-use std::{fs::File, io::Read, path::PathBuf};
+use std::path::PathBuf;
 
+use eframe::epaint::ColorImage;
 use eframe::{
-    egui::{CentralPanel, ColorImage, Context, TextureHandle, TopBottomPanel, Ui, Key},
+    egui::{CentralPanel, Context, Key, TextureHandle, TopBottomPanel, Ui, Window},
     App, Frame,
 };
-use image::imageops::FilterType;
-use zip::ZipArchive;
 
+use crate::{error::Error, file::File};
+
+#[derive(Default)]
 pub struct MyApp {
-    resolution: [u32; 2],
-    next: usize,
-    images: Box<[ColorImage]>,
+    file: File,
     current: Option<TextureHandle>,
-}
-
-impl Default for MyApp {
-    fn default() -> Self {
-        Self {
-            resolution: [1920, 1080],
-            next: 0,
-            images: Box::default(),
-            current: None
-        }
-    }
+    error: Option<Error>,
 }
 
 impl MyApp {
-    fn open(&mut self, path: &PathBuf, ctx: &Context) {
-        let file = File::open(path).unwrap();
+    fn set_error(&mut self, error: Error) {
+        self.error = Some(error);
+    }
 
-        let mut file = ZipArchive::new(file).unwrap();
+    fn set_image(&mut self, image: ColorImage, ctx: &Context) {
+        self.current = Some(ctx.load_texture("current-image", image));
+    }
 
-        let images = {
-            (0..file.len())
-                .map(|i| {
-                    let mut f = file.by_index(i).unwrap();
-                    let mut buf = Vec::with_capacity(f.size() as usize);
-
-                    f.read_to_end(&mut buf).unwrap();
-
-                    let r = self.resolution;
-                    std::thread::spawn(move || load_image_from_memory(&r, &buf).unwrap())
-                })
-                .collect::<Vec<_>>()
-        };
-
-        let images = images
-            .into_iter()
-            .map(|handle| handle.join().unwrap())
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-
-        self.images = images;
-        self.next = 0;
-        self.set_current(self.next, ctx);
+    fn try_open(&mut self, path: &PathBuf, ctx: &Context) -> Result<(), Error> {
+        self.file.try_open(path)?;
+        let image = self.file.try_image()?;
+        self.set_image(image, ctx);
+        Ok(())
     }
 
     fn render_img(&mut self, ui: &mut Ui) {
@@ -71,52 +46,67 @@ impl MyApp {
         }
     }
 
-    fn next(&mut self, ctx: &Context) {
-        if self.next < self.images.len() - 1 {
-            self.next += 1;
-            self.set_current(self.next, ctx);
+    fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
+        if let Some(image) = self.file.try_next_image()? {
+            self.set_image(image, ctx);
         }
+
+        Ok(())
     }
 
-    fn set_current(&mut self, idx: usize, ctx: &Context) {
-        self.current = Some(ctx.load_texture("current-image", self.images[idx].clone()));
-    }
-
-    fn previous(&mut self, ctx: &Context) {
-        if self.next > 0 {
-            self.next -= 1;
-            self.set_current(self.next, ctx);
+    fn try_previous(&mut self, ctx: &Context) -> Result<(), Error> {
+        if let Some(image) = self.file.try_previous_image()? {
+            self.set_image(image, ctx);
         }
+
+        Ok(())
     }
 
-    fn listen_input(&mut self, ctx: &Context) {
-        if self.images.len() > 0 {
+    fn try_listen_input(&mut self, ctx: &Context) -> Result<(), Error> {
+        if self.file.is_some() {
             let scroll = ctx.input().scroll_delta;
-            let arrow_up = ctx.input().key_released(Key::ArrowUp);
-            let arrow_down = ctx.input().key_released(Key::ArrowDown);
+            let arrow_up = ctx.input().key_released(Key::W);
+            let arrow_down = ctx.input().key_released(Key::S);
 
             if scroll.y < -10.0 || arrow_down {
-                self.next(ctx);
+                self.try_next(ctx)?;
             } else if scroll.y > 10.0 || arrow_up {
-                self.previous(ctx);
+                self.try_previous(ctx)?;
             }
         }
+
+        Ok(())
     }
 
-    fn listen_drop(&mut self, ctx: &Context) {
-        if let Some(path) = ctx.input().raw.dropped_files.get(0).and_then(|file| file.path.as_ref()) {
-            self.open(path, ctx);
+    fn try_listen_drop(&mut self, ctx: &Context) -> Result<(), Error> {
+        if let Some(path) = ctx
+            .input()
+            .raw
+            .dropped_files
+            .get(0)
+            .and_then(|file| file.path.as_ref())
+        {
+            self.try_open(path, ctx)?;
         }
+
+        Ok(())
     }
-}
 
-impl App for MyApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+    fn try_update(&mut self, ctx: &Context, _frame: &mut Frame) -> Result<(), Error> {
+        self.try_listen_drop(ctx)?;
+        self.try_listen_input(ctx)?;
 
-        self.listen_drop(ctx);
+        self.render_top_bar(ctx);
 
-        self.listen_input(ctx);
+        CentralPanel::default().show(ctx, |ui| {
+            self.render_error(ui);
+            self.render_img(ui);
+        });
 
+        Ok(())
+    }
+
+    fn render_top_bar(&mut self, ctx: &Context) {
         TopBottomPanel::top("control-bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.visuals_mut().button_frame = false;
@@ -124,7 +114,9 @@ impl App for MyApp {
                     ui.set_style(ui.ctx().style());
                     if ui.button("💻 Open").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
-                            self.open(&path, ui.ctx());
+                            if let Err(e) = self.try_open(&path, ui.ctx()) {
+                                self.set_error(e);
+                            }
                         }
 
                         ui.close_menu();
@@ -132,21 +124,30 @@ impl App for MyApp {
                 });
             });
         });
+    }
 
-        CentralPanel::default().show(ctx, |ui| {
-            self.render_img(ui);
-        });
+    fn render_error(&mut self, ui: &mut Ui) {
+        if self.error.is_some() {
+            Window::new("Error occurred")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.heading(format!("{}", self.error.as_ref().unwrap()));
+                    ui.horizontal(|ui| {
+                        if ui.button("Confirm").clicked() {
+                            self.error = None;
+                            ui.ctx().request_repaint();
+                        }
+                    });
+                });
+        }
     }
 }
 
-fn load_image_from_memory(resolution: &[u32], image_data: &[u8]) -> Result<ColorImage, image::ImageError> {
-    let (w, h) = (resolution[0], resolution[1]);
-    let image = image::load_from_memory(image_data)?.resize(w, h, FilterType::Triangle);
-
-    let size = [image.width() as _, image.height() as _];
-
-    let image_buffer = image.to_rgba8();
-    let pixels = image_buffer.as_flat_samples();
-
-    Ok(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
+impl App for MyApp {
+    fn update(&mut self, ctx: &Context, frame: &mut Frame) {
+        if let Err(e) = self.try_update(ctx, frame) {
+            self.set_error(e);
+        }
+    }
 }

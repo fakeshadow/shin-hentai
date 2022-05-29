@@ -8,3 +8,9 @@ eframe = "0.18.0"
 image = "0.24.2"
 rfd = "0.8.2"
 zip = { version = "0.6.2" }
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+panic = "abort"
