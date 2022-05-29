@@ -24,8 +24,7 @@ impl MyApp {
     }
 
     fn try_open(&mut self, path: &PathBuf, ctx: &Context) -> Result<(), Error> {
-        self.file.try_open(path)?;
-        let image = self.file.try_image()?;
+        let image = self.file.try_first(path)?;
         self.set_image(image, ctx);
         Ok(())
     }
@@ -53,14 +52,14 @@ impl MyApp {
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
-        if let Some(image) = self.file.try_next_image()? {
+        if let Some(image) = self.file.try_next()? {
             self.set_image(image, ctx);
         }
         Ok(())
     }
 
     fn try_previous(&mut self, ctx: &Context) -> Result<(), Error> {
-        if let Some(image) = self.file.try_previous_image()? {
+        if let Some(image) = self.file.try_previous()? {
             self.set_image(image, ctx);
         }
         Ok(())
