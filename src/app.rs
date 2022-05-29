@@ -33,15 +33,22 @@ impl MyApp {
     fn render_img(&mut self, ui: &mut Ui) {
         if let Some(texture) = self.current.as_ref() {
             let window_size = ui.available_size();
-
             let org_size = texture.size_vec2();
 
-            ui.centered_and_justified(|ui| {
-                ui.image(
-                    texture,
-                    [org_size.x * window_size.y / org_size.y, window_size.y],
-                )
-            });
+            let x_ratio = org_size.x / window_size.x;
+            let y_ratio = org_size.y / window_size.y;
+
+            let size = if x_ratio > 1.0 || y_ratio > 1.0 {
+                if x_ratio > y_ratio {
+                    [window_size.x, org_size.y / x_ratio]
+                } else {
+                    [org_size.x / y_ratio, window_size.y]
+                }
+            } else {
+                [org_size.x, org_size.y]
+            };
+
+            ui.centered_and_justified(|ui| ui.image(texture, size));
         }
     }
 
@@ -49,7 +56,6 @@ impl MyApp {
         if let Some(image) = self.file.try_next_image()? {
             self.set_image(image, ctx);
         }
-
         Ok(())
     }
 
@@ -57,7 +63,6 @@ impl MyApp {
         if let Some(image) = self.file.try_previous_image()? {
             self.set_image(image, ctx);
         }
-
         Ok(())
     }
 
