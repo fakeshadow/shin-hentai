@@ -7,20 +7,27 @@ use eframe::{
 
 use crate::{error::Error, file::File};
 
-#[derive(Default)]
 pub struct MyApp {
     file: File,
-    current: Option<TextureHandle>,
+    current: TextureHandle,
     error: Option<Error>,
 }
 
 impl MyApp {
+    pub(crate) fn new(ctx: &Context) -> Self {
+        Self {
+            file: File::default(),
+            current: ctx.load_texture("current-image", crate::image::drag_drop()),
+            error: None,
+        }
+    }
+
     fn set_error(&mut self, error: Error) {
         self.error = Some(error);
     }
 
     fn set_image(&mut self, image: ColorImage, ctx: &Context) {
-        self.current = Some(ctx.load_texture("current-image", image));
+        self.current = ctx.load_texture("current-image", image);
     }
 
     fn try_open(&mut self, path: &PathBuf, ctx: &Context) -> Result<(), Error> {
@@ -30,25 +37,23 @@ impl MyApp {
     }
 
     fn render_img(&mut self, ui: &mut Ui) {
-        if let Some(texture) = self.current.as_ref() {
-            let window_size = ui.available_size();
-            let org_size = texture.size_vec2();
+        let window_size = ui.available_size();
+        let org_size = self.current.size_vec2();
 
-            let x_ratio = org_size.x / window_size.x;
-            let y_ratio = org_size.y / window_size.y;
+        let x_ratio = org_size.x / window_size.x;
+        let y_ratio = org_size.y / window_size.y;
 
-            let size = if x_ratio > 1.0 || y_ratio > 1.0 {
-                if x_ratio > y_ratio {
-                    [window_size.x, org_size.y / x_ratio]
-                } else {
-                    [org_size.x / y_ratio, window_size.y]
-                }
+        let size = if x_ratio > 1.0 || y_ratio > 1.0 {
+            if x_ratio > y_ratio {
+                [window_size.x, org_size.y / x_ratio]
             } else {
-                [org_size.x, org_size.y]
-            };
+                [org_size.x / y_ratio, window_size.y]
+            }
+        } else {
+            [org_size.x, org_size.y]
+        };
 
-            ui.centered_and_justified(|ui| ui.image(texture, size));
-        }
+        ui.centered_and_justified(|ui| ui.image(&self.current, size));
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {

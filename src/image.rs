@@ -1,14 +1,28 @@
-use eframe::egui::ColorImage;
+use eframe::{egui::ColorImage, IconData};
 
-// generated with build.rs
-mod const_image {
-    include!(concat!(env!("OUT_DIR"), "/const_image.rs"));
+use crate::const_image::*;
+
+#[cold]
+#[inline(never)]
+pub(crate) fn icon() -> IconData {
+    let [width, height] = ICON_IMAGE_SIZE;
+    IconData {
+        rgba: ICON_IMAGE.to_vec(),
+        width,
+        height,
+    }
 }
 
 #[cold]
 #[inline(never)]
-fn broken_image() -> ColorImage {
-    ColorImage::from_rgba_unmultiplied(const_image::BROKEN_IMAGE_SIZE, const_image::BROKEN_IMAGE)
+pub(crate) fn drag_drop() -> ColorImage {
+    ColorImage::from_rgba_unmultiplied(DRAG_DROP_IMAGE_SIZE, DRAG_DROP_IMAGE)
+}
+
+#[cold]
+#[inline(never)]
+fn broken() -> ColorImage {
+    ColorImage::from_rgba_unmultiplied(BROKEN_IMAGE_SIZE, BROKEN_IMAGE)
 }
 
 pub(crate) fn render_image(buf: &[u8]) -> ColorImage {
@@ -19,5 +33,5 @@ pub(crate) fn render_image(buf: &[u8]) -> ColorImage {
             let pixels = image_buffer.as_flat_samples();
             ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
         })
-        .unwrap_or_else(|_| broken_image())
+        .unwrap_or_else(|_| broken())
 }

@@ -3,18 +3,22 @@
 mod app;
 mod error;
 mod file;
-mod icon;
 mod image;
+
+// generated with build.rs
+mod const_image {
+    include!(concat!(env!("OUT_DIR"), "/const_image.rs"));
+}
 
 fn main() {
     let options = eframe::NativeOptions {
-        icon_data: Some(icon::icon()),
+        icon_data: Some(image::icon()),
         ..Default::default()
     };
 
     eframe::run_native(
         "maji hentai",
         options,
-        Box::new(|_| Box::new(app::MyApp::default())),
+        Box::new(|ctx| Box::new(app::MyApp::new(&ctx.egui_ctx))),
     );
 }

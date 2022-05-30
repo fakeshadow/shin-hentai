@@ -3,37 +3,53 @@ use std::{env, error, fs, io::Read, path::Path};
 use tiny_skia::Pixmap;
 
 fn main() {
-    generate_broken_image();
+    generate_image().unwrap();
 }
 
-// generate raw bytes of broken-image.svg as const var.
-// this would remove the runtime cost of parsing it.
-fn generate_broken_image() {
-    generate_svg(
-        "./resource/broken-image.svg",
-        "const_image.rs",
-        |map| {
-            format!(
-                "pub const BROKEN_IMAGE: &[u8] = &{:?};\r\npub const BROKEN_IMAGE_SIZE: [usize; 2] = [{}, {}];",
-                map.data(),
-                map.width() as usize,
-                map.height() as usize
-            )
-        }
-    ).unwrap();
-}
+// generate raw bytes of svg as const var.
+// this would remove the runtime cost of parsing them.
+fn generate_image() -> Result<(), Box<dyn error::Error + Send + Sync>> {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let path = Path::new(&out_dir).join("const_image.rs");
 
-fn generate_svg<O>(
-    in_path: impl AsRef<Path>,
-    out_path: impl AsRef<Path>,
-    cb: impl FnOnce(Pixmap) -> O,
-) -> Result<(), Box<dyn error::Error + Send + Sync>>
-where
-    O: AsRef<[u8]>,
-{
     let mut buf = Vec::new();
 
-    let mut file = fs::File::open(in_path)?;
+    let map = render_svg("./resource/broken-image.svg")?;
+    buf.extend_from_slice(format!(
+        "pub const BROKEN_IMAGE: &[u8] = &{:?};\r\npub const BROKEN_IMAGE_SIZE: [usize; 2] = [{}, {}];",
+        map.data(),
+        map.width() as usize,
+        map.height() as usize
+    ).as_bytes());
+
+    let map = render_svg("./resource/shin-hentai.svg")?;
+    buf.extend_from_slice(
+        format!(
+        "pub const ICON_IMAGE: &[u8] = &{:?};\r\npub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
+        map.data(),
+        map.width(),
+        map.height()
+    )
+        .as_bytes(),
+    );
+
+    let map = render_svg("./resource/drag-drop.svg")?;
+    buf.extend_from_slice(format!(
+        "pub const DRAG_DROP_IMAGE: &[u8] = &{:?};\r\npub const DRAG_DROP_IMAGE_SIZE: [usize; 2] = [{}, {}];",
+        map.data(),
+        map.width() as usize,
+        map.height() as usize
+    ).as_bytes());
+
+    fs::write(path, &buf)?;
+
+    Ok(())
+}
+
+fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + Send + Sync>> {
+    let mut buf = Vec::new();
+
+    let mut file = fs::File::open(path)?;
 
     file.read_to_end(&mut buf)?;
 
@@ -45,20 +61,15 @@ where
     let pixmap_size = rtree.svg_node().size.to_screen_size();
     let [w, h] = [pixmap_size.width(), pixmap_size.height()];
 
-    let mut pixmap = Pixmap::new(w, h).unwrap();
+    let mut map = Pixmap::new(w, h).unwrap();
 
     resvg::render(
         &rtree,
         usvg::FitTo::Original,
         tiny_skia::Transform::default(),
-        pixmap.as_mut(),
+        map.as_mut(),
     )
     .unwrap();
 
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let path = Path::new(&out_dir).join(out_path);
-
-    fs::write(&path, cb(pixmap))?;
-
-    Ok(())
+    Ok(map)
 }
