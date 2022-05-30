@@ -6,7 +6,7 @@ pub(crate) fn icon() -> IconData {
     let bytes = include_bytes!("../resource/shin-hentai.png");
 
     let icon = image::load_from_memory(bytes)
-        .expect("Failed to open icon path")
+        .expect("Failed to open /resource/shin-hentai.png")
         .to_rgba8();
 
     let (width, height) = icon.dimensions();
