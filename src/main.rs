@@ -4,6 +4,7 @@ mod app;
 mod error;
 mod file;
 mod icon;
+mod image;
 
 fn main() {
     let options = eframe::NativeOptions {

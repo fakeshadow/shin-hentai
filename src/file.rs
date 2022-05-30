@@ -154,17 +154,7 @@ impl File {
         self.file
             .read_file(&mut self.idx, &mut self.buf, direction)?;
 
-        let image = image::load_from_memory(&self.buf)
-            .map(|image| {
-                let size = [image.width() as _, image.height() as _];
-                let image_buffer = image.to_rgba8();
-                let pixels = image_buffer.as_flat_samples();
-
-                ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
-            })
-            .unwrap_or_else(|_| broken_image());
-
-        Ok(image)
+        Ok(crate::image::render_image(&self.buf))
     }
 }
 
@@ -187,15 +177,4 @@ fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-// generated with build.rs
-mod broken_image {
-    include!(concat!(env!("OUT_DIR"), "/broken_image.rs"));
-}
-
-#[cold]
-#[inline(never)]
-fn broken_image() -> ColorImage {
-    ColorImage::from_rgba_unmultiplied(broken_image::BROKEN_IMAGE_SIZE, broken_image::BROKEN_IMAGE)
 }
