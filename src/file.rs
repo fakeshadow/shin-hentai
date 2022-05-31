@@ -11,7 +11,9 @@ trait File {
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error>;
 }
 
-impl File for () {
+struct NoFile;
+
+impl File for NoFile {
     fn is_eof(&self) -> bool {
         true
     }
@@ -81,28 +83,61 @@ impl File for PathFile {
         self.idx + 1 == self.file.len()
     }
 
+    fn read(&mut self, _: &mut Vec<u8>, _: Direction) -> Result<(), Error> {
+        unreachable!("PathFile should not be called on File::read")
+    }
+}
+
+struct NestFile {
+    parent: PathFile,
+    child: Box<dyn File>,
+}
+
+impl File for NestFile {
+    fn is_eof(&self) -> bool {
+        self.parent.is_eof() && self.child.is_eof()
+    }
+
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
-        match direction {
-            Direction::Next if self.is_eof() => return Ok(()),
-            Direction::Prev if self.idx == 0 => return Ok(()),
-            Direction::Next => self.idx += 1,
-            Direction::Prev => self.idx -= 1,
-            Direction::Current => {
-                if self.is_eof() {
-                    return Ok(());
-                }
+        if self.child.is_eof() {
+            let this = &mut self.parent;
+            match direction {
+                Direction::Next if this.is_eof() => return Ok(()),
+                Direction::Prev if this.idx == 0 => return Ok(()),
+                Direction::Next => this.idx += 1,
+                Direction::Prev => this.idx -= 1,
+                Direction::Current => {}
             }
+
+            let path = &this.file[this.idx];
+
+            let is_zip = path.is_file()
+                && path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s == "zip")
+                    .unwrap_or(false);
+
+            let mut file = fs::File::open(path)?;
+
+            if is_zip {
+                let file = ZipArchive::new(file)?;
+
+                self.child = Box::new(ZipFile { idx: 0, file });
+
+                self.read(buf, direction)
+            } else {
+                if let Ok(meta) = file.metadata() {
+                    buf.reserve(meta.len() as usize);
+                }
+
+                file.read_to_end(buf)?;
+
+                Ok(())
+            }
+        } else {
+            self.child.read(buf, direction)
         }
-
-        let mut file = fs::File::open(&self.file[self.idx])?;
-
-        if let Ok(meta) = file.metadata() {
-            buf.reserve(meta.len() as usize);
-        }
-
-        file.read_to_end(buf)?;
-
-        Ok(())
     }
 }
 
@@ -114,7 +149,7 @@ pub(crate) struct FileObj {
 impl Default for FileObj {
     fn default() -> Self {
         Self {
-            file: Box::new(()),
+            file: Box::new(NoFile),
             buf: Vec::new(),
         }
     }
@@ -138,9 +173,13 @@ impl FileObj {
         let file = if path.is_dir() {
             let mut files = Vec::new();
             visit_dirs(path, &mut |p| files.push(p))?;
-            Box::new(PathFile {
-                idx: 0,
-                file: files.into_boxed_slice(),
+
+            Box::new(NestFile {
+                parent: PathFile {
+                    idx: 0,
+                    file: files.into_boxed_slice(),
+                },
+                child: Box::new(NoFile),
             }) as _
         } else {
             let file = fs::File::open(path)?;
