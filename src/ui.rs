@@ -7,13 +7,13 @@ use eframe::{
 
 use crate::{error::Error, file::FileObj};
 
-pub struct MyApp {
+pub struct UiObj {
     file: FileObj,
     current: TextureHandle,
     error: Option<Error>,
 }
 
-impl MyApp {
+impl UiObj {
     pub(crate) fn new(ctx: &Context) -> Self {
         Self {
             file: FileObj::default(),
@@ -35,26 +35,6 @@ impl MyApp {
             self.set_image(image, ctx);
         }
         Ok(())
-    }
-
-    fn render_img(&mut self, ui: &mut Ui) {
-        let window_size = ui.available_size();
-        let org_size = self.current.size_vec2();
-
-        let x_ratio = org_size.x / window_size.x;
-        let y_ratio = org_size.y / window_size.y;
-
-        let size = if x_ratio > 1.0 || y_ratio > 1.0 {
-            if x_ratio > y_ratio {
-                [window_size.x, org_size.y / x_ratio]
-            } else {
-                [org_size.x / y_ratio, window_size.y]
-            }
-        } else {
-            [org_size.x, org_size.y]
-        };
-
-        ui.centered_and_justified(|ui| ui.image(&self.current, size));
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
@@ -133,6 +113,26 @@ impl MyApp {
         });
     }
 
+    fn render_img(&mut self, ui: &mut Ui) {
+        let window_size = ui.available_size();
+        let org_size = self.current.size_vec2();
+
+        let x_ratio = org_size.x / window_size.x;
+        let y_ratio = org_size.y / window_size.y;
+
+        let size = if x_ratio > 1.0 || y_ratio > 1.0 {
+            if x_ratio > y_ratio {
+                [window_size.x, org_size.y / x_ratio]
+            } else {
+                [org_size.x / y_ratio, window_size.y]
+            }
+        } else {
+            [org_size.x, org_size.y]
+        };
+
+        ui.centered_and_justified(|ui| ui.image(&self.current, size));
+    }
+
     fn render_error(&mut self, ui: &mut Ui) {
         if self.error.is_some() {
             Window::new("Error occurred")
@@ -151,7 +151,7 @@ impl MyApp {
     }
 }
 
-impl App for MyApp {
+impl App for UiObj {
     fn update(&mut self, ctx: &Context, frame: &mut Frame) {
         if let Err(e) = self.try_update(ctx, frame) {
             self.set_error(e);

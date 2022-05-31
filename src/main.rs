@@ -1,9 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
 mod error;
 mod file;
 mod image;
+mod ui;
 
 // generated with build.rs
 mod const_image {
@@ -19,6 +19,6 @@ fn main() {
     eframe::run_native(
         "maji hentai",
         options,
-        Box::new(|ctx| Box::new(app::MyApp::new(&ctx.egui_ctx))),
+        Box::new(|ctx| Box::new(ui::UiObj::new(&ctx.egui_ctx))),
     );
 }
