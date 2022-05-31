@@ -6,7 +6,8 @@ a simple comic viewer
 
 ## Supported platform:
 - Linux
-- Windows (Confirmed on: Windows 11)
+- macOS
+- Windows
 
 ## Build from source:
 1. install Rust language. Click [here](https://www.rust-lang.org/learn/get-started) to see how.
