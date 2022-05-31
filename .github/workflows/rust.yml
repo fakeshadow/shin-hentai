@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        target:
+          - { name: Linux, os: ubuntu-latest, triple: x86_64-unknown-linux-gnu }
+          - { name: macOS, os: macos-latest, triple: x86_64-apple-darwin }
+          - { name: Windows, os: windows-2022, triple: x86_64-pc-windows-msvc }
+        version:
+          - stable
+    name: ${{ matrix.target.name }} / ${{ matrix.version }}
+    runs-on: ${{ matrix.target.os }}
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install ${{ matrix.version }}
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.version }}-${{ matrix.target.triple }}
+        profile: minimal
+        override: true
+
+    - name: build
+      run: |
+        cargo build
