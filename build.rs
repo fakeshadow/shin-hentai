@@ -15,27 +15,30 @@ fn generate_image() -> Result<(), Box<dyn error::Error + Send + Sync>> {
     let mut buf = Vec::new();
 
     let map = render_svg("./resource/broken-image.svg")?;
-    buf.extend_from_slice(format!(
-        "pub const BROKEN_IMAGE: &[u8] = &{:?};\r\npub const BROKEN_IMAGE_SIZE: [usize; 2] = [{}, {}];",
+    buf.extend_from_slice(
+        format!(
+        "pub const BROKEN_IMAGE: &[u8] = &{:?};pub const BROKEN_IMAGE_SIZE: [usize; 2] = [{}, {}];",
         map.data(),
         map.width() as usize,
         map.height() as usize
-    ).as_bytes());
+    )
+        .as_bytes(),
+    );
 
     let map = render_svg("./resource/shin-hentai.svg")?;
     buf.extend_from_slice(
         format!(
-        "pub const ICON_IMAGE: &[u8] = &{:?};\r\npub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
-        map.data(),
-        map.width(),
-        map.height()
-    )
+            "pub const ICON_IMAGE: &[u8] = &{:?};pub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
+            map.data(),
+            map.width(),
+            map.height()
+        )
         .as_bytes(),
     );
 
     let map = render_svg("./resource/drag-drop.svg")?;
     buf.extend_from_slice(format!(
-        "pub const DRAG_DROP_IMAGE: &[u8] = &{:?};\r\npub const DRAG_DROP_IMAGE_SIZE: [usize; 2] = [{}, {}];",
+        "pub const DRAG_DROP_IMAGE: &[u8] = &{:?};pub const DRAG_DROP_IMAGE_SIZE: [usize; 2] = [{}, {}];",
         map.data(),
         map.width() as usize,
         map.height() as usize

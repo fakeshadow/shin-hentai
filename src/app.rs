@@ -5,10 +5,10 @@ use eframe::{
     App, Frame,
 };
 
-use crate::{error::Error, file::File};
+use crate::{error::Error, file::FileObj};
 
 pub struct MyApp {
-    file: File,
+    file: FileObj,
     current: TextureHandle,
     error: Option<Error>,
 }
@@ -16,7 +16,7 @@ pub struct MyApp {
 impl MyApp {
     pub(crate) fn new(ctx: &Context) -> Self {
         Self {
-            file: File::default(),
+            file: FileObj::default(),
             current: ctx.load_texture("current-image", crate::image::drag_drop()),
             error: None,
         }
@@ -31,8 +31,9 @@ impl MyApp {
     }
 
     fn try_open(&mut self, path: &PathBuf, ctx: &Context) -> Result<(), Error> {
-        let image = self.file.try_first(path)?;
-        self.set_image(image, ctx);
+        if let Some(image) = self.file.try_first(path)? {
+            self.set_image(image, ctx);
+        }
         Ok(())
     }
 
@@ -71,16 +72,14 @@ impl MyApp {
     }
 
     fn try_listen_input(&mut self, ctx: &Context) -> Result<(), Error> {
-        if self.file.is_some() {
-            let scroll = ctx.input().scroll_delta;
-            let arrow_up = ctx.input().key_released(Key::W);
-            let arrow_down = ctx.input().key_released(Key::S);
+        let scroll = ctx.input().scroll_delta;
+        let arrow_up = ctx.input().key_pressed(Key::W);
+        let arrow_down = ctx.input().key_pressed(Key::S);
 
-            if scroll.y < -10.0 || arrow_down {
-                self.try_next(ctx)?;
-            } else if scroll.y > 10.0 || arrow_up {
-                self.try_previous(ctx)?;
-            }
+        if scroll.y < -10.0 || arrow_down {
+            self.try_next(ctx)?;
+        } else if scroll.y > 10.0 || arrow_up {
+            self.try_previous(ctx)?;
         }
 
         Ok(())

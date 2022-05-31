@@ -5,52 +5,41 @@ use zip::ZipArchive;
 
 use crate::error::Error;
 
-pub(crate) struct File {
+trait File {
+    fn is_eof(&self) -> bool;
+
+    fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error>;
+}
+
+impl File for () {
+    fn is_eof(&self) -> bool {
+        true
+    }
+
+    fn read(&mut self, _: &mut Vec<u8>, _: Direction) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+struct ZipFile {
     idx: usize,
-    file: _File,
-    buf: Vec<u8>,
+    file: ZipArchive<fs::File>,
 }
 
-impl Default for File {
-    fn default() -> Self {
-        Self {
-            idx: 0,
-            file: _File::None,
-            buf: Vec::new(),
-        }
-    }
-}
-
-pub(crate) enum _File {
-    File(ZipArchive<fs::File>),
-    Path(Box<[PathBuf]>),
-    None,
-}
-
-impl _File {
-    fn len(&self) -> usize {
-        match *self {
-            Self::File(ref file) => file.len(),
-            Self::Path(ref path) => path.len(),
-            Self::None => unreachable!("No _File found"),
-        }
+impl File for ZipFile {
+    fn is_eof(&self) -> bool {
+        self.idx + 1 == self.file.len()
     }
 
-    fn is_some(&self) -> bool {
-        !matches!(*self, Self::None)
-    }
+    fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
+        match direction {
+            Direction::Next | Direction::Current => {
+                while !self.is_eof() {
+                    if matches!(direction, Direction::Next) {
+                        self.idx += 1;
+                    }
 
-    fn read_file(
-        &mut self,
-        idx: &mut usize,
-        buf: &mut Vec<u8>,
-        direction: Direction,
-    ) -> Result<(), Error> {
-        match *self {
-            Self::File(ref mut zip) => match direction {
-                Direction::Next => loop {
-                    let len = zip.len();
-                    let mut file = zip.by_index(*idx)?;
+                    let mut file = self.file.by_index(self.idx)?;
 
                     if file.is_file() {
                         buf.reserve(file.size() as usize);
@@ -58,107 +47,132 @@ impl _File {
                         return Ok(());
                     }
 
-                    *idx += 1;
-
-                    if *idx == len {
-                        break;
+                    if matches!(direction, Direction::Current) {
+                        self.idx += 1;
                     }
-                },
-                Direction::Prev => loop {
-                    let mut file = zip.by_index(*idx)?;
-
-                    if file.is_file() {
-                        buf.reserve(file.size() as usize);
-                        file.read_to_end(buf)?;
-                        return Ok(());
-                    }
-
-                    if *idx == 0 {
-                        break;
-                    } else {
-                        *idx -= 1;
-                    }
-                },
-            },
-            Self::Path(ref path) => {
-                let mut file = fs::File::open(&path[*idx])?;
-
-                if let Ok(meta) = file.metadata() {
-                    buf.reserve(meta.len() as usize);
                 }
-
-                file.read_to_end(buf)?;
             }
-            Self::None => unreachable!("No _File found"),
-        };
+            Direction::Prev => {
+                while self.idx != 0 {
+                    self.idx -= 1;
+
+                    let mut file = self.file.by_index(self.idx)?;
+
+                    if file.is_file() {
+                        buf.reserve(file.size() as usize);
+                        file.read_to_end(buf)?;
+                        return Ok(());
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
 }
 
-impl File {
-    pub(crate) fn is_some(&self) -> bool {
-        self.file.is_some()
+struct PathFile {
+    idx: usize,
+    file: Box<[PathBuf]>,
+}
+
+impl File for PathFile {
+    fn is_eof(&self) -> bool {
+        self.idx + 1 == self.file.len()
     }
 
-    pub(crate) fn try_first(&mut self, path: &PathBuf) -> Result<ColorImage, Error> {
+    fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
+        match direction {
+            Direction::Next if self.is_eof() => return Ok(()),
+            Direction::Prev if self.idx == 0 => return Ok(()),
+            Direction::Next => self.idx += 1,
+            Direction::Prev => self.idx -= 1,
+            Direction::Current => {
+                if self.is_eof() {
+                    return Ok(());
+                }
+            }
+        }
+
+        let mut file = fs::File::open(&self.file[self.idx])?;
+
+        if let Ok(meta) = file.metadata() {
+            buf.reserve(meta.len() as usize);
+        }
+
+        file.read_to_end(buf)?;
+
+        Ok(())
+    }
+}
+
+pub(crate) struct FileObj {
+    file: Box<dyn File>,
+    buf: Vec<u8>,
+}
+
+impl Default for FileObj {
+    fn default() -> Self {
+        Self {
+            file: Box::new(()),
+            buf: Vec::new(),
+        }
+    }
+}
+
+impl FileObj {
+    pub(crate) fn try_first(&mut self, path: &PathBuf) -> Result<Option<ColorImage>, Error> {
         self.try_open(path)?;
-        self.try_read(Direction::Next)
+        self.try_read(Direction::Current)
     }
 
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
-        if self.idx < self.file.len() - 1 {
-            self.idx += 1;
-            let image = self.try_read(Direction::Next)?;
-            Ok(Some(image))
-        } else {
-            Ok(None)
-        }
+        self.try_read(Direction::Next)
     }
 
     pub(crate) fn try_previous(&mut self) -> Result<Option<ColorImage>, Error> {
-        if self.idx > 0 {
-            self.idx -= 1;
-            let image = self.try_read(Direction::Prev)?;
-            Ok(Some(image))
-        } else {
-            Ok(None)
-        }
+        self.try_read(Direction::Prev)
     }
 
     fn try_open(&mut self, path: &PathBuf) -> Result<(), Error> {
         let file = if path.is_dir() {
             let mut files = Vec::new();
             visit_dirs(path, &mut |p| files.push(p))?;
-            _File::Path(files.into_boxed_slice())
+            Box::new(PathFile {
+                idx: 0,
+                file: files.into_boxed_slice(),
+            }) as _
         } else {
             let file = fs::File::open(path)?;
             let file = ZipArchive::new(file)?;
-            _File::File(file)
+            Box::new(ZipFile { idx: 0, file }) as _
         };
 
         self.file = file;
-        self.idx = 0;
         self.buf.clear();
 
         Ok(())
     }
 
-    fn try_read(&mut self, direction: Direction) -> Result<ColorImage, Error> {
+    fn try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
         let res = self._try_read(direction);
         self.buf.clear();
         res
     }
 
-    fn _try_read(&mut self, direction: Direction) -> Result<ColorImage, Error> {
-        self.file
-            .read_file(&mut self.idx, &mut self.buf, direction)?;
+    fn _try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
+        self.file.read(&mut self.buf, direction)?;
 
-        Ok(crate::image::render_image(&self.buf))
+        if self.buf.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(crate::image::render_image(&self.buf)))
+        }
     }
 }
 
 enum Direction {
+    Current,
     Next,
     Prev,
 }
