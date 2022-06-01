@@ -1,4 +1,5 @@
 use eframe::{egui::ColorImage, IconData};
+use image::imageops::FilterType;
 
 use crate::const_image::*;
 
@@ -25,13 +26,23 @@ fn broken() -> ColorImage {
     ColorImage::from_rgba_unmultiplied(BROKEN_IMAGE_SIZE, BROKEN_IMAGE)
 }
 
-pub(crate) fn render_image(buf: &[u8]) -> ColorImage {
+pub(crate) fn render_image(buf: &[u8], base_res: &[u32; 2]) -> ColorImage {
     image::load_from_memory(buf)
-        .map(|image| {
-            let size = [image.width() as _, image.height() as _];
+        .map(|mut image| {
+            let [base_w, base_h] = *base_res;
+            let w = image.width();
+            let h = image.height();
+
+            if w > base_w || h > base_h {
+                image = image.resize(base_w, base_h, FilterType::Triangle);
+            }
+
             let image_buffer = image.to_rgba8();
             let pixels = image_buffer.as_flat_samples();
-            ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
+            ColorImage::from_rgba_unmultiplied(
+                [image.width() as _, image.height() as _],
+                pixels.as_slice(),
+            )
         })
         .unwrap_or_else(|_| broken())
 }

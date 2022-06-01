@@ -143,20 +143,20 @@ impl File for NestFile {
 }
 
 pub(crate) struct FileObj {
+    res: [u32; 2],
     file: Box<dyn File>,
     buf: Vec<u8>,
 }
 
-impl Default for FileObj {
-    fn default() -> Self {
+impl FileObj {
+    pub(crate) fn new(res: [u32; 2]) -> Self {
         Self {
+            res,
             file: Box::new(NoFile),
             buf: Vec::new(),
         }
     }
-}
 
-impl FileObj {
     pub(crate) fn try_first(&mut self, path: &PathBuf) -> Result<Option<ColorImage>, Error> {
         self.try_open(path)?;
         self.try_read(Direction::Current)
@@ -206,7 +206,7 @@ impl FileObj {
         if self.buf.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(crate::image::render_image(&self.buf)))
+            Ok(Some(crate::image::render_image(&self.buf, &self.res)))
         }
     }
 }

@@ -10,6 +10,7 @@ repository = "https://github.com/fakeshadow/shin-hentai"
 eframe = "0.18.0"
 image = "0.24.2"
 rfd = "0.8.2"
+winit = { version = "0.26.1", default-features = false }
 zip = { version = "0.6.2" }
 
 [build-dependencies]

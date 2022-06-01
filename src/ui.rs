@@ -14,9 +14,9 @@ pub struct UiObj {
 }
 
 impl UiObj {
-    pub(crate) fn new(ctx: &Context) -> Self {
+    pub(crate) fn new(ctx: &Context, res: [u32; 2]) -> Self {
         Self {
-            file: FileObj::default(),
+            file: FileObj::new(res),
             current: ctx.load_texture("current-image", crate::image::drag_drop()),
             error: None,
         }

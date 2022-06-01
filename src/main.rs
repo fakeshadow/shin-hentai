@@ -16,9 +16,20 @@ fn main() {
         ..Default::default()
     };
 
+    let res = collect_base_resolution();
+
     eframe::run_native(
         "maji hentai",
         options,
-        Box::new(|ctx| Box::new(ui::UiObj::new(&ctx.egui_ctx))),
+        Box::new(move |ctx| Box::new(ui::UiObj::new(&ctx.egui_ctx, res))),
     );
+}
+
+fn collect_base_resolution() -> [u32; 2] {
+    let size = winit::event_loop::EventLoop::new()
+        .primary_monitor()
+        .unwrap()
+        .size();
+
+    [size.width, size.height]
 }
