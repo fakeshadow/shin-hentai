@@ -98,6 +98,7 @@ impl File for NestFile {
         self.parent.is_eof() && self.child.is_eof()
     }
 
+    #[inline(never)]
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
         if self.child.is_eof() {
             let this = &mut self.parent;
@@ -216,6 +217,7 @@ enum Direction {
     Prev,
 }
 
+#[inline(never)]
 fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
