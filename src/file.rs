@@ -67,6 +67,16 @@ impl File for ZipFile {
                     }
                 }
             }
+            Direction::Offset(idx) => {
+                assert!(idx < self.file.len());
+                self.idx = idx;
+                let mut file = self.file.by_index(self.idx)?;
+
+                if file.is_file() {
+                    buf.reserve(file.size() as usize);
+                    file.read_to_end(buf)?;
+                }
+            }
         }
 
         Ok(())
@@ -107,6 +117,10 @@ impl File for NestFile {
                 Direction::Prev if this.idx == 0 => return Ok(()),
                 Direction::Next => this.idx += 1,
                 Direction::Prev => this.idx -= 1,
+                Direction::Offset(idx) => {
+                    assert!(idx < this.file.len());
+                    this.idx = idx;
+                }
                 Direction::Current => {}
             }
 
@@ -211,10 +225,12 @@ impl FileObj {
     }
 }
 
+#[allow(dead_code)]
 enum Direction {
     Current,
     Next,
     Prev,
+    Offset(usize),
 }
 
 #[inline(never)]
