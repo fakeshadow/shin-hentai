@@ -30,7 +30,7 @@ impl UiObj {
         self.current = ctx.load_texture("current-image", image);
     }
 
-    fn try_open(&mut self, path: &PathBuf, ctx: &Context) -> Result<(), Error> {
+    fn try_open(&mut self, path: PathBuf, ctx: &Context) -> Result<(), Error> {
         if let Some(image) = self.file.try_first(path)? {
             self.set_image(image, ctx);
         }
@@ -71,7 +71,7 @@ impl UiObj {
             .raw
             .dropped_files
             .get(0)
-            .and_then(|file| file.path.as_ref())
+            .and_then(|file| file.path.as_ref().cloned())
         {
             self.try_open(path, ctx)?;
         }
@@ -101,7 +101,7 @@ impl UiObj {
                     ui.set_style(ui.ctx().style());
                     if ui.button("📂 Open").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
-                            if let Err(e) = self.try_open(&path, ui.ctx()) {
+                            if let Err(e) = self.try_open(path, ui.ctx()) {
                                 self.set_error(e);
                             }
                         }

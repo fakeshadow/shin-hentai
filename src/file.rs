@@ -160,6 +160,7 @@ pub(crate) struct FileObj {
     res: [u32; 2],
     file: Box<dyn File>,
     buf: Vec<u8>,
+    directory_hint: PathBuf,
 }
 
 impl FileObj {
@@ -168,26 +169,44 @@ impl FileObj {
             res,
             file: Box::new(NoFile),
             buf: Vec::new(),
+            directory_hint: PathBuf::default(),
         }
     }
 
-    pub(crate) fn try_first(&mut self, path: &PathBuf) -> Result<Option<ColorImage>, Error> {
+    fn try_next_obj(&mut self) -> Result<Option<ColorImage>, Error> {
+        match next_file_path(&self.directory_hint) {
+            Ok(Some(path)) => self.try_first(path),
+            Ok(None) => {
+                self.directory_hint = PathBuf::default();
+                Ok(None)
+            }
+            Err(e) => {
+                self.directory_hint = PathBuf::default();
+                Err(e)
+            }
+        }
+    }
+
+    pub(crate) fn try_first(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
         self.try_open(path)?;
         self.try_read(Direction::Current)
     }
 
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
-        self.try_read(Direction::Next)
+        match self.try_read(Direction::Next)? {
+            None if self.file.is_eof() && self.directory_hint.exists() => self.try_next_obj(),
+            res => Ok(res),
+        }
     }
 
     pub(crate) fn try_previous(&mut self) -> Result<Option<ColorImage>, Error> {
         self.try_read(Direction::Prev)
     }
 
-    fn try_open(&mut self, path: &PathBuf) -> Result<(), Error> {
+    fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
         let file = if path.is_dir() {
             let mut files = Vec::new();
-            visit_dirs(path, &mut |p| files.push(p))?;
+            visit_dirs(&path, &mut |p| files.push(p))?;
 
             Box::new(NestFile {
                 parent: PathFile {
@@ -197,13 +216,14 @@ impl FileObj {
                 child: Box::new(NoFile),
             }) as _
         } else {
-            let file = fs::File::open(path)?;
+            let file = fs::File::open(&path)?;
             let file = ZipArchive::new(file)?;
             Box::new(ZipFile { idx: 0, file }) as _
         };
 
         self.file = file;
         self.buf.clear();
+        self.directory_hint = path;
 
         Ok(())
     }
@@ -248,4 +268,31 @@ fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+#[inline(never)]
+fn next_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
+    match path.parent() {
+        Some(p) => {
+            assert!(p.is_dir());
+
+            let mut entries = fs::read_dir(p)?;
+
+            for entry in entries.by_ref() {
+                let entry = entry?;
+                if &entry.path() == path {
+                    break;
+                }
+            }
+
+            match entries.next() {
+                Some(entry) => {
+                    let entry = entry?;
+                    Ok(Some(entry.path()))
+                }
+                None => Ok(None),
+            }
+        }
+        None => Ok(None),
+    }
 }
