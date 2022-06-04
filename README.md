@@ -8,6 +8,7 @@ a simple comic viewer
 - Linux
 - macOS
 - Windows
+- Web (Partial functional)
 
 ## Build from source:
 1. install Rust language. Click [here](https://www.rust-lang.org/learn/get-started) to see how.
