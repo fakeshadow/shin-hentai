@@ -4,7 +4,7 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let options = eframe::NativeOptions {
-            icon_data: Some(image::icon()),
+            icon_data: Some(shin_hentai::image::icon()),
             ..Default::default()
         };
 
