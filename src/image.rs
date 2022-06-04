@@ -5,7 +5,7 @@ use crate::const_image::*;
 
 #[cold]
 #[inline(never)]
-pub(crate) fn icon() -> IconData {
+pub fn icon() -> IconData {
     let [width, height] = ICON_IMAGE_SIZE;
     IconData {
         rgba: ICON_IMAGE.to_vec(),

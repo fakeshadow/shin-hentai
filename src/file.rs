@@ -1,7 +1,6 @@
 use std::{fs, io::Read, path::PathBuf};
 
 use eframe::egui::ColorImage;
-use zip::ZipArchive;
 
 use crate::error::Error;
 
@@ -23,11 +22,13 @@ impl File for NoFile {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct ZipFile {
     idx: usize,
-    file: ZipArchive<fs::File>,
+    file: zip::ZipArchive<fs::File>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl File for ZipFile {
     fn is_eof(&self) -> bool {
         self.idx + 1 == self.file.len()
@@ -136,11 +137,19 @@ impl File for NestFile {
             let mut file = fs::File::open(path)?;
 
             if is_zip {
-                let file = ZipArchive::new(file)?;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let file = zip::ZipArchive::new(file)?;
 
-                self.child = Box::new(ZipFile { idx: 0, file });
+                    self.child = Box::new(ZipFile { idx: 0, file });
 
-                self.read(buf, direction)
+                    self.read(buf, direction)
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    todo!()
+                }
             } else {
                 if let Ok(meta) = file.metadata() {
                     buf.reserve(meta.len() as usize);
@@ -216,9 +225,17 @@ impl FileObj {
                 child: Box::new(NoFile),
             }) as _
         } else {
-            let file = fs::File::open(&path)?;
-            let file = ZipArchive::new(file)?;
-            Box::new(ZipFile { idx: 0, file }) as _
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let file = fs::File::open(&path)?;
+                let file = zip::ZipArchive::new(file)?;
+                Box::new(ZipFile { idx: 0, file }) as _
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                todo!()
+            }
         };
 
         self.file = file;

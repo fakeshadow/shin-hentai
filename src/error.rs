@@ -1,11 +1,11 @@
 use std::{error, fmt, io};
 
 use image::ImageError;
-use zip::result::ZipError;
 
 pub(crate) enum Error {
     Io(io::Error),
-    Zip(ZipError),
+    #[cfg(not(target_arch = "wasm32"))]
+    Zip(zip::result::ZipError),
     Image(ImageError),
 }
 
@@ -14,6 +14,7 @@ impl fmt::Debug for Error {
         match *self {
             Self::Io(ref e) => e.fmt(f),
             Self::Image(ref e) => e.fmt(f),
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Zip(ref e) => e.fmt(f),
         }
     }
@@ -24,6 +25,7 @@ impl fmt::Display for Error {
         match *self {
             Self::Io(ref e) => e.fmt(f),
             Self::Image(ref e) => e.fmt(f),
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Zip(ref e) => e.fmt(f),
         }
     }
@@ -35,8 +37,9 @@ impl From<ImageError> for Error {
     }
 }
 
-impl From<ZipError> for Error {
-    fn from(e: ZipError) -> Self {
+#[cfg(not(target_arch = "wasm32"))]
+impl From<zip::result::ZipError> for Error {
+    fn from(e: zip::result::ZipError) -> Self {
         Self::Zip(e)
     }
 }

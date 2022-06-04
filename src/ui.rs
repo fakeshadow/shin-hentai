@@ -14,7 +14,7 @@ pub struct UiObj {
 }
 
 impl UiObj {
-    pub(crate) fn new(ctx: &Context, res: [u32; 2]) -> Self {
+    pub fn new(ctx: &Context, res: [u32; 2]) -> Self {
         Self {
             file: FileObj::new(res),
             current: ctx.load_texture("current-image", crate::image::drag_drop()),
@@ -100,7 +100,11 @@ impl UiObj {
                 ui.menu_button("💻 Menu", |ui| {
                     ui.set_style(ui.ctx().style());
                     if ui.button("📂 Open").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                        let fut = rfd::AsyncFileDialog::new().pick_file();
+
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some(path) = futures_executor::block_on(fut) {
+                            let path = path.path().into();
                             if let Err(e) = self.try_open(path, ui.ctx()) {
                                 self.set_error(e);
                             }
