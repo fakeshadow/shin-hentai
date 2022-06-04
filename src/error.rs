@@ -4,7 +4,6 @@ use image::ImageError;
 
 pub(crate) enum Error {
     Io(io::Error),
-    #[cfg(not(target_arch = "wasm32"))]
     Zip(zip::result::ZipError),
     Image(ImageError),
 }
@@ -14,7 +13,6 @@ impl fmt::Debug for Error {
         match *self {
             Self::Io(ref e) => e.fmt(f),
             Self::Image(ref e) => e.fmt(f),
-            #[cfg(not(target_arch = "wasm32"))]
             Self::Zip(ref e) => e.fmt(f),
         }
     }
@@ -25,7 +23,6 @@ impl fmt::Display for Error {
         match *self {
             Self::Io(ref e) => e.fmt(f),
             Self::Image(ref e) => e.fmt(f),
-            #[cfg(not(target_arch = "wasm32"))]
             Self::Zip(ref e) => e.fmt(f),
         }
     }
@@ -37,7 +34,6 @@ impl From<ImageError> for Error {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl From<zip::result::ZipError> for Error {
     fn from(e: zip::result::ZipError) -> Self {
         Self::Zip(e)

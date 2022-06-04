@@ -1,6 +1,7 @@
 use std::{fs, io::Read, path::PathBuf};
 
 use eframe::egui::ColorImage;
+use zip::ZipArchive;
 
 use crate::error::Error;
 
@@ -22,13 +23,14 @@ impl File for NoFile {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 struct ZipFile {
     idx: usize,
-    file: zip::ZipArchive<fs::File>,
+    #[cfg(not(target_arch = "wasm32"))]
+    file: ZipArchive<fs::File>,
+    #[cfg(target_arch = "wasm32")]
+    file: ZipArchive<std::io::Cursor<Vec<u8>>>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl File for ZipFile {
     fn is_eof(&self) -> bool {
         self.idx + 1 == self.file.len()
@@ -99,11 +101,13 @@ impl File for PathFile {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct NestFile {
     parent: PathFile,
     child: Box<dyn File>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl File for NestFile {
     fn is_eof(&self) -> bool {
         self.parent.is_eof() && self.child.is_eof()
@@ -137,19 +141,11 @@ impl File for NestFile {
             let mut file = fs::File::open(path)?;
 
             if is_zip {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let file = zip::ZipArchive::new(file)?;
+                let file = ZipArchive::new(file)?;
 
-                    self.child = Box::new(ZipFile { idx: 0, file });
+                self.child = Box::new(ZipFile { idx: 0, file });
 
-                    self.read(buf, direction)
-                }
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    todo!()
-                }
+                self.read(buf, direction)
             } else {
                 if let Ok(meta) = file.metadata() {
                     buf.reserve(meta.len() as usize);
@@ -182,27 +178,26 @@ impl FileObj {
         }
     }
 
-    fn try_next_obj(&mut self) -> Result<Option<ColorImage>, Error> {
-        match next_file_path(&self.directory_hint) {
-            Ok(Some(path)) => self.try_first(path),
-            Ok(None) => {
-                self.directory_hint = PathBuf::default();
-                Ok(None)
-            }
-            Err(e) => {
-                self.directory_hint = PathBuf::default();
-                Err(e)
-            }
-        }
-    }
-
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn try_first(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
         self.try_open(path)?;
         self.try_read(Direction::Current)
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn try_first(&mut self, file: Vec<u8>) -> Result<Option<ColorImage>, Error> {
+        let file = ZipArchive::new(std::io::Cursor::new(file))?;
+        let file = Box::new(ZipFile { idx: 0, file }) as _;
+
+        self.file = file;
+        self.buf.clear();
+
+        self.try_read(Direction::Current)
+    }
+
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
         match self.try_read(Direction::Next)? {
+            #[cfg(not(target_arch = "wasm32"))]
             None if self.file.is_eof() && self.directory_hint.exists() => self.try_next_obj(),
             res => Ok(res),
         }
@@ -212,6 +207,7 @@ impl FileObj {
         self.try_read(Direction::Prev)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
         let file = if path.is_dir() {
             let mut files = Vec::new();
@@ -225,17 +221,9 @@ impl FileObj {
                 child: Box::new(NoFile),
             }) as _
         } else {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let file = fs::File::open(&path)?;
-                let file = zip::ZipArchive::new(file)?;
-                Box::new(ZipFile { idx: 0, file }) as _
-            }
-
-            #[cfg(target_arch = "wasm32")]
-            {
-                todo!()
-            }
+            let file = fs::File::open(&path)?;
+            let file = ZipArchive::new(file)?;
+            Box::new(ZipFile { idx: 0, file }) as _
         };
 
         self.file = file;
@@ -243,6 +231,21 @@ impl FileObj {
         self.directory_hint = path;
 
         Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn try_next_obj(&mut self) -> Result<Option<ColorImage>, Error> {
+        match next_file_path(&self.directory_hint) {
+            Ok(Some(path)) => self.try_first(path),
+            Ok(None) => {
+                self.directory_hint = PathBuf::default();
+                Ok(None)
+            }
+            Err(e) => {
+                self.directory_hint = PathBuf::default();
+                Err(e)
+            }
+        }
     }
 
     fn try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {

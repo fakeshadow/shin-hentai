@@ -5,6 +5,9 @@ use eframe::{
     App, Frame,
 };
 
+#[cfg(target_arch = "wasm32")]
+use eframe::egui::Id;
+
 use crate::{error::Error, file::FileObj};
 
 pub struct UiObj {
@@ -30,6 +33,7 @@ impl UiObj {
         self.current = ctx.load_texture("current-image", image);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf, ctx: &Context) -> Result<(), Error> {
         if let Some(image) = self.file.try_first(path)? {
             self.set_image(image, ctx);
@@ -73,13 +77,41 @@ impl UiObj {
             .get(0)
             .and_then(|file| file.path.as_ref().cloned())
         {
-            self.try_open(path, ctx)?;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.try_open(path, ctx)?;
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                todo!("drag drop is not supported in web");
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn try_listen_async(&mut self, ctx: &Context) -> Result<(), Error> {
+        let opt = ctx.data().get_temp::<Vec<u8>>(Id::new(88));
+
+        if opt.is_some() {
+            ctx.data().remove::<Vec<u8>>(Id::new(88));
+        }
+
+        if let Some(file) = opt {
+            if let Some(image) = self.file.try_first(file)? {
+                self.set_image(image, ctx);
+            }
         }
 
         Ok(())
     }
 
     fn try_update(&mut self, ctx: &Context, _frame: &mut Frame) -> Result<(), Error> {
+        #[cfg(target_arch = "wasm32")]
+        self.try_listen_async(ctx)?;
+
         self.try_listen_drop(ctx)?;
         self.try_listen_input(ctx)?;
 
@@ -108,6 +140,19 @@ impl UiObj {
                             if let Err(e) = self.try_open(path, ui.ctx()) {
                                 self.set_error(e);
                             }
+                        }
+
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            // See Ui::try_open for explain.
+                            let ctx = ui.ctx().clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                if let Some(file) = fut.await {
+                                    let buf = file.read().await;
+                                    ctx.data().insert_temp(Id::new(88), buf);
+                                    ctx.request_repaint();
+                                }
+                            })
                         }
 
                         ui.close_menu();
