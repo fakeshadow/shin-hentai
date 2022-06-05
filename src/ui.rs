@@ -6,7 +6,7 @@ use eframe::{
 };
 
 #[cfg(target_arch = "wasm32")]
-use eframe::egui::Id;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{error::Error, file::FileObj};
 
@@ -14,6 +14,8 @@ pub struct UiObj {
     file: FileObj,
     current: TextureHandle,
     error: Option<Error>,
+    #[cfg(target_arch = "wasm32")]
+    async_value: Rc<RefCell<Option<Vec<u8>>>>,
 }
 
 impl UiObj {
@@ -22,6 +24,8 @@ impl UiObj {
             file: FileObj::new(res),
             current: ctx.load_texture("current-image", crate::image::drag_drop()),
             error: None,
+            #[cfg(target_arch = "wasm32")]
+            async_value: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -70,35 +74,30 @@ impl UiObj {
     }
 
     fn try_listen_drop(&mut self, ctx: &Context) -> Result<(), Error> {
-        if let Some(path) = ctx
-            .input()
-            .raw
-            .dropped_files
-            .get(0)
-            .and_then(|file| file.path.as_ref().cloned())
+        let file = ctx.input().raw.dropped_files.get(0).cloned();
+
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
+            if let Some(path) = file.and_then(|file| file.path) {
                 self.try_open(path, ctx)?;
             }
+        }
 
-            #[cfg(target_arch = "wasm32")]
-            {
-                todo!("drag drop is not supported in web");
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(path) = file.map(|file| file.name) {
+                // TODO: how to open file silently?
             }
         }
 
         Ok(())
     }
 
+    // on web operations are mostly happen in async and async_value
+    // is used to pass output of async calls to Ui.
     #[cfg(target_arch = "wasm32")]
     fn try_listen_async(&mut self, ctx: &Context) -> Result<(), Error> {
-        let opt = ctx.data().get_temp::<Vec<u8>>(Id::new(88));
-
-        if opt.is_some() {
-            ctx.data().remove::<Vec<u8>>(Id::new(88));
-        }
-
+        let opt = self.async_value.borrow_mut().take();
         if let Some(file) = opt {
             if let Some(image) = self.file.try_first(file)? {
                 self.set_image(image, ctx);
@@ -144,12 +143,13 @@ impl UiObj {
 
                         #[cfg(target_arch = "wasm32")]
                         {
-                            // See Ui::try_open for explain.
+                            // See Ui::try_listen_async for explain.
                             let ctx = ui.ctx().clone();
+                            let value = self.async_value.clone();
                             wasm_bindgen_futures::spawn_local(async move {
                                 if let Some(file) = fut.await {
                                     let buf = file.read().await;
-                                    ctx.data().insert_temp(Id::new(88), buf);
+                                    *value.borrow_mut() = Some(buf);
                                     ctx.request_repaint();
                                 }
                             })

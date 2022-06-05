@@ -273,6 +273,7 @@ enum Direction {
     Offset(usize),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[inline(never)]
 fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
     if dir.is_dir() {
@@ -290,6 +291,7 @@ fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[inline(never)]
 fn next_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
     match path.parent() {
