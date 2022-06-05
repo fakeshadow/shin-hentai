@@ -139,19 +139,19 @@ impl UiObj {
                 ui.menu_button("💻 Menu", |ui| {
                     ui.set_style(ui.ctx().style());
                     if ui.button("📂 Open").clicked() {
-                        let fut = rfd::AsyncFileDialog::new().pick_file();
-
                         #[cfg(not(target_arch = "wasm32"))]
-                        if let Some(path) = futures_executor::block_on(fut) {
-                            let path = path.path().into();
-                            if let Err(e) = self.try_open(path, ui.ctx()) {
-                                self.set_error(e);
+                        {
+                            if let Some(path) = rfd::FileDialog::new().pick_file() {
+                                if let Err(e) = self.try_open(path, ui.ctx()) {
+                                    self.set_error(e);
+                                }
                             }
                         }
 
                         #[cfg(target_arch = "wasm32")]
                         {
                             // See Ui::try_listen_async for explain.
+                            let fut = rfd::AsyncFileDialog::new().pick_file();
                             let ctx = ui.ctx().clone();
                             let value = self.async_value.clone();
                             wasm_bindgen_futures::spawn_local(async move {
