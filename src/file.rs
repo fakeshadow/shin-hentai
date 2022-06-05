@@ -1,7 +1,13 @@
-use std::{fs, io::Read, path::PathBuf};
+use std::{
+    io::{Read, Seek},
+    path::PathBuf,
+};
 
 use eframe::egui::ColorImage;
 use zip::ZipArchive;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::fs;
 
 use crate::error::Error;
 
@@ -23,15 +29,15 @@ impl File for NoFile {
     }
 }
 
-struct ZipFile {
+struct ZipFile<R> {
     idx: usize,
-    #[cfg(not(target_arch = "wasm32"))]
-    file: ZipArchive<fs::File>,
-    #[cfg(target_arch = "wasm32")]
-    file: ZipArchive<std::io::Cursor<Vec<u8>>>,
+    file: ZipArchive<R>,
 }
 
-impl File for ZipFile {
+impl<R> File for ZipFile<R>
+where
+    R: Read + Seek,
+{
     fn is_eof(&self) -> bool {
         self.idx + 1 == self.file.len()
     }
@@ -165,6 +171,7 @@ pub(crate) struct FileObj {
     res: [u32; 2],
     file: Box<dyn File>,
     buf: Vec<u8>,
+    #[allow(dead_code)]
     directory_hint: PathBuf,
 }
 
@@ -185,7 +192,10 @@ impl FileObj {
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn try_first(&mut self, file: Vec<u8>) -> Result<Option<ColorImage>, Error> {
+    pub(crate) fn try_first(
+        &mut self,
+        file: impl AsRef<[u8]> + 'static,
+    ) -> Result<Option<ColorImage>, Error> {
         let file = ZipArchive::new(std::io::Cursor::new(file))?;
         let file = Box::new(ZipFile { idx: 0, file }) as _;
 

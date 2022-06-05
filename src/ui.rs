@@ -1,9 +1,10 @@
-use std::path::PathBuf;
-
 use eframe::{
     egui::{CentralPanel, ColorImage, Context, Key, TextureHandle, TopBottomPanel, Ui, Window},
     App, Frame,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, rc::Rc};
@@ -45,6 +46,15 @@ impl UiObj {
         Ok(())
     }
 
+    #[cfg(target_arch = "wasm32")]
+    fn try_open(&mut self, buf: impl AsRef<[u8]> + 'static, ctx: &Context) -> Result<(), Error> {
+        if let Some(image) = self.file.try_first(buf)? {
+            self.set_image(image, ctx);
+        }
+
+        Ok(())
+    }
+
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
         if let Some(image) = self.file.try_next()? {
             self.set_image(image, ctx);
@@ -74,7 +84,7 @@ impl UiObj {
     }
 
     fn try_listen_drop(&mut self, ctx: &Context) -> Result<(), Error> {
-        let file = ctx.input().raw.dropped_files.get(0).cloned();
+        let file = ctx.input_mut().raw.dropped_files.pop();
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -85,8 +95,8 @@ impl UiObj {
 
         #[cfg(target_arch = "wasm32")]
         {
-            if let Some(path) = file.map(|file| file.name) {
-                // TODO: how to open file silently?
+            if let Some(bytes) = file.and_then(|file| file.bytes) {
+                self.try_open(bytes, ctx)?;
             }
         }
 
@@ -99,9 +109,7 @@ impl UiObj {
     fn try_listen_async(&mut self, ctx: &Context) -> Result<(), Error> {
         let opt = self.async_value.borrow_mut().take();
         if let Some(file) = opt {
-            if let Some(image) = self.file.try_first(file)? {
-                self.set_image(image, ctx);
-            }
+            self.try_open(file, ctx)?;
         }
 
         Ok(())
