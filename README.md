@@ -1,6 +1,9 @@
 # shin-hentai
 a simple comic viewer
 
+## Demo:
+[WebAssembly](https://fakeshadow.github.io/)
+
 ## Requirement:
 - Rust 1.61.0
 
