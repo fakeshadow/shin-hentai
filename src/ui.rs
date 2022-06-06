@@ -1,5 +1,8 @@
 use eframe::{
-    egui::{CentralPanel, ColorImage, Context, Key, TextureHandle, TopBottomPanel, Ui, Window},
+    egui::{
+        CentralPanel, ColorImage, Context, Key, Spinner, TextureHandle, TopBottomPanel, Ui, Widget,
+        Window,
+    },
     App, Frame,
 };
 
@@ -15,6 +18,7 @@ pub struct UiObj {
     file: FileObj,
     current: TextureHandle,
     error: Option<Error>,
+    is_loading: bool,
     #[cfg(target_arch = "wasm32")]
     async_value: Rc<RefCell<Option<Vec<u8>>>>,
 }
@@ -25,6 +29,7 @@ impl UiObj {
             file: FileObj::new(res),
             current: ctx.load_texture("current-image", crate::image::drag_drop()),
             error: None,
+            is_loading: false,
             #[cfg(target_arch = "wasm32")]
             async_value: Rc::new(RefCell::new(None)),
         }
@@ -32,10 +37,12 @@ impl UiObj {
 
     fn set_error(&mut self, error: Error) {
         self.error = Some(error);
+        self.is_loading = false;
     }
 
     fn set_image(&mut self, image: ColorImage, ctx: &Context) {
         self.current = ctx.load_texture("current-image", image);
+        self.is_loading = false;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -89,6 +96,7 @@ impl UiObj {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(path) = file.and_then(|file| file.path) {
+                self.is_loading = true;
                 self.try_open(path, ctx)?;
             }
         }
@@ -96,6 +104,7 @@ impl UiObj {
         #[cfg(target_arch = "wasm32")]
         {
             if let Some(bytes) = file.and_then(|file| file.bytes) {
+                self.is_loading = true;
                 self.try_open(bytes, ctx)?;
             }
         }
@@ -109,7 +118,8 @@ impl UiObj {
     fn try_listen_async(&mut self, ctx: &Context) -> Result<(), Error> {
         let opt = self.async_value.borrow_mut().take();
         if let Some(file) = opt {
-            self.try_open(file, ctx)?;
+            let res = self.try_open(file, ctx);
+            res?;
         }
 
         Ok(())
@@ -126,7 +136,12 @@ impl UiObj {
 
         CentralPanel::default().show(ctx, |ui| {
             self.render_error(ui);
-            self.render_img(ui);
+
+            if self.is_loading {
+                self.render_loading(ui);
+            } else {
+                self.render_img(ui);
+            }
         });
 
         Ok(())
@@ -154,6 +169,7 @@ impl UiObj {
                             let fut = rfd::AsyncFileDialog::new().pick_file();
                             let ctx = ui.ctx().clone();
                             let value = self.async_value.clone();
+                            self.is_loading = true;
                             wasm_bindgen_futures::spawn_local(async move {
                                 if let Some(file) = fut.await {
                                     let buf = file.read().await;
@@ -188,6 +204,10 @@ impl UiObj {
         };
 
         ui.centered_and_justified(|ui| ui.image(&self.current, size));
+    }
+
+    fn render_loading(&mut self, ui: &mut Ui) {
+        ui.centered_and_justified(|ui| Spinner::default().ui(ui));
     }
 
     fn render_error(&mut self, ui: &mut Ui) {
