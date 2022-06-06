@@ -60,7 +60,7 @@ IF %FAST% == 0 (
   echo Optimizing wasm...
   @REM to get wasm-opt:  apt/brew/dnf install binaryen
   @REM add -g to get debug symbols :
-  wasm-opt "docs\%CRATE_NAME%_bg.wasm" -O3 --fast-math -o "docs\%CRATE_NAME%_bg.wasm"
+  wasm-opt "docs\%CRATE_NAME_SNAKE_CASE%_bg.wasm" -O4 --fast-math -o "docs\%CRATE_NAME_SNAKE_CASE%_bg.wasm"
 )
 
 echo Finished: docs/%CRATE_NAME_SNAKE_CASE%.wasm"
