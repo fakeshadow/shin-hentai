@@ -20,7 +20,7 @@ a simple comic viewer
 
 3. run `cargo build --release` to compile the binary.
 
-4. the compiled binary is in `target/relase/` directory with the name `shin-hentai`.
+4. the compiled binary is in `target/relase/` directory with the name `shin_hentai_bin`.
 
 ## Control:
 - drag and drop zip file or folder to start viewing.
