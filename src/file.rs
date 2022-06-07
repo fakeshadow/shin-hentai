@@ -121,48 +121,51 @@ impl File for NestFile {
 
     #[inline(never)]
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
-        if self.child.is_eof() {
-            let this = &mut self.parent;
-            match direction {
-                Direction::Next if this.is_eof() => return Ok(()),
-                Direction::Prev if this.idx == 0 => return Ok(()),
-                Direction::Next => this.idx += 1,
-                Direction::Prev => this.idx -= 1,
-                Direction::Offset(idx) => {
-                    assert!(idx < this.file.len());
-                    this.idx = idx;
-                }
-                Direction::Current => {}
+        if !self.child.is_eof() {
+            return self.child.read(buf, direction);
+        }
+
+        let this = &mut self.parent;
+
+        match direction {
+            Direction::Next if this.is_eof() => return Ok(()),
+            Direction::Prev if this.idx == 0 => return Ok(()),
+            Direction::Next => this.idx += 1,
+            Direction::Prev => this.idx -= 1,
+            Direction::Offset(idx) => {
+                assert!(idx < this.file.len());
+                this.idx = idx;
             }
+            Direction::Current => {}
+        }
 
-            let path = &this.file[this.idx];
+        let path = &this.file[this.idx];
 
-            let is_zip = path.is_file()
-                && path
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s == "zip")
-                    .unwrap_or(false);
+        if !path.is_file() {
+            // TODO: handle nested NestFile.
+            return Ok(());
+        }
 
-            let mut file = fs::File::open(path)?;
+        let mut file = fs::File::open(path)?;
 
-            if is_zip {
-                let file = ZipArchive::new(file)?;
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-                self.child = Box::new(ZipFile { idx: 0, file });
-
-                self.read(buf, direction)
-            } else {
+        match ext {
+            "jpg" | "jpeg" | "png" => {
                 if let Ok(meta) = file.metadata() {
                     buf.reserve(meta.len() as usize);
                 }
-
                 file.read_to_end(buf)?;
-
                 Ok(())
             }
-        } else {
-            self.child.read(buf, direction)
+            // treat all uncertain file extensions as zip file.
+            // zip archive would return a format error for all files that are not supported.
+            // TODO: add special error handling for determined non zip files.
+            _ => {
+                let file = ZipArchive::new(file)?;
+                self.child = Box::new(ZipFile { idx: 0, file });
+                self.read(buf, direction)
+            }
         }
     }
 }
