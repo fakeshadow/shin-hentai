@@ -219,9 +219,14 @@ impl FileObj {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
+        self.buf.clear();
+        // regardless the outcome advance path to skip bad files.
+        self.directory_hint = path;
+        let path = &self.directory_hint;
+
         let file = if path.is_dir() {
             let mut files = Vec::new();
-            visit_dirs(&path, &mut |p| files.push(p))?;
+            visit_dirs(path, &mut |p| files.push(p))?;
 
             Box::new(NestFile {
                 parent: PathFile {
@@ -237,8 +242,6 @@ impl FileObj {
         };
 
         self.file = file;
-        self.buf.clear();
-        self.directory_hint = path;
 
         Ok(())
     }

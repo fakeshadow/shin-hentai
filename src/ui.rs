@@ -1,7 +1,7 @@
 use eframe::{
     egui::{
-        CentralPanel, ColorImage, Context, Key, Spinner, TextureHandle, TopBottomPanel, Ui, Widget,
-        Window,
+        Align, Align2, CentralPanel, ColorImage, Context, Key, Layout, Spinner, TextureHandle,
+        TopBottomPanel, Ui, Widget, Window,
     },
     App, Frame,
 };
@@ -215,9 +215,10 @@ impl UiObj {
             Window::new("Error occurred")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ui.ctx(), |ui| {
-                    ui.heading(format!("{}", self.error.as_ref().unwrap()));
-                    ui.horizontal(|ui| {
+                    ui.with_layout(Layout::top_down(Align::Center), |ui| {
+                        ui.heading(format!("{}", self.error.as_ref().unwrap()));
                         if ui.button("Confirm").clicked() {
                             self.error = None;
                             ui.ctx().request_repaint();
