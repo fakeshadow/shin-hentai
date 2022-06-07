@@ -92,79 +92,89 @@ where
     }
 }
 
-struct PathFile {
-    idx: usize,
-    file: Box<[PathBuf]>,
-}
-
-impl File for PathFile {
-    fn is_eof(&self) -> bool {
-        self.idx + 1 == self.file.len()
-    }
-
-    fn read(&mut self, _: &mut Vec<u8>, _: Direction) -> Result<(), Error> {
-        unreachable!("PathFile should not be called on File::read")
-    }
-}
+#[cfg(not(target_arch = "wasm32"))]
+use nest::NestFile;
 
 #[cfg(not(target_arch = "wasm32"))]
-struct NestFile {
-    parent: PathFile,
-    child: Box<dyn File>,
-}
+mod nest {
+    use super::*;
 
-#[cfg(not(target_arch = "wasm32"))]
-impl File for NestFile {
-    fn is_eof(&self) -> bool {
-        self.parent.is_eof() && self.child.is_eof()
+    pub(super) struct NestFile {
+        idx: usize,
+        file: Box<[PathBuf]>,
+        child: Box<dyn File>,
     }
 
-    #[inline(never)]
-    fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
-        if !self.child.is_eof() {
-            return self.child.read(buf, direction);
+    impl NestFile {
+        pub(super) fn try_from_path(path: &PathBuf) -> Result<Self, Error> {
+            let mut files = Vec::new();
+            visit_dirs(path, &mut |p| files.push(p))?;
+
+            Ok(NestFile {
+                idx: 0,
+                file: files.into_boxed_slice(),
+                child: Box::new(NoFile),
+            })
         }
 
-        let this = &mut self.parent;
+        fn _is_eof(&self) -> bool {
+            self.idx + 1 == self.file.len()
+        }
+    }
 
-        match direction {
-            Direction::Next if this.is_eof() => return Ok(()),
-            Direction::Prev if this.idx == 0 => return Ok(()),
-            Direction::Next => this.idx += 1,
-            Direction::Prev => this.idx -= 1,
-            Direction::Offset(idx) => {
-                assert!(idx < this.file.len());
-                this.idx = idx;
+    impl File for NestFile {
+        fn is_eof(&self) -> bool {
+            self._is_eof() && self.child.is_eof()
+        }
+
+        #[inline(never)]
+        fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
+            if !self.child.is_eof() {
+                return self.child.read(buf, direction);
             }
-            Direction::Current => {}
-        }
 
-        let path = &this.file[this.idx];
-
-        if !path.is_file() {
-            // TODO: handle nested NestFile.
-            return Ok(());
-        }
-
-        let mut file = fs::File::open(path)?;
-
-        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-
-        match ext {
-            "jpg" | "jpeg" | "png" => {
-                if let Ok(meta) = file.metadata() {
-                    buf.reserve(meta.len() as usize);
+            match direction {
+                Direction::Next if self._is_eof() => return Ok(()),
+                Direction::Prev if self.idx == 0 => return Ok(()),
+                Direction::Next => self.idx += 1,
+                Direction::Prev => self.idx -= 1,
+                Direction::Offset(idx) => {
+                    assert!(idx < self.file.len());
+                    self.idx = idx;
                 }
-                file.read_to_end(buf)?;
-                Ok(())
+                Direction::Current => {}
             }
-            // treat all uncertain file extensions as zip file.
-            // zip archive would return a format error for all files that are not supported.
-            // TODO: add special error handling for determined non zip files.
-            _ => {
-                let file = ZipArchive::new(file)?;
-                self.child = Box::new(ZipFile { idx: 0, file });
-                self.read(buf, direction)
+
+            let path = &self.file[self.idx];
+
+            if !path.is_file() {
+                assert!(path.is_dir());
+
+                self.child = Box::new(NestFile::try_from_path(path)?) as _;
+
+                return self.read(buf, direction);
+            }
+
+            let mut file = fs::File::open(path)?;
+
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+            match ext {
+                "jpg" | "jpeg" | "png" => {
+                    if let Ok(meta) = file.metadata() {
+                        buf.reserve(meta.len() as usize);
+                    }
+                    file.read_to_end(buf)?;
+                    Ok(())
+                }
+                // treat all uncertain file extensions as zip file.
+                // zip archive would return a format error for all files that are not supported.
+                // TODO: add special error handling for determined non zip files.
+                _ => {
+                    let file = ZipArchive::new(file)?;
+                    self.child = Box::new(ZipFile { idx: 0, file });
+                    self.read(buf, direction)
+                }
             }
         }
     }
@@ -219,7 +229,9 @@ impl FileObj {
     pub(crate) fn try_previous(&mut self) -> Result<Option<ColorImage>, Error> {
         self.try_read(Direction::Prev)
     }
+}
 
+impl FileObj {
     #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
         self.buf.clear();
@@ -227,24 +239,13 @@ impl FileObj {
         self.directory_hint = path;
         let path = &self.directory_hint;
 
-        let file = if path.is_dir() {
-            let mut files = Vec::new();
-            visit_dirs(path, &mut |p| files.push(p))?;
-
-            Box::new(NestFile {
-                parent: PathFile {
-                    idx: 0,
-                    file: files.into_boxed_slice(),
-                },
-                child: Box::new(NoFile),
-            }) as _
+        self.file = if path.is_dir() {
+            Box::new(NestFile::try_from_path(path)?) as _
         } else {
             let file = fs::File::open(&path)?;
             let file = ZipArchive::new(file)?;
             Box::new(ZipFile { idx: 0, file }) as _
         };
-
-        self.file = file;
 
         Ok(())
     }
