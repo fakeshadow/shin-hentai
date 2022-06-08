@@ -6,10 +6,15 @@ use std::{
 use eframe::egui::ColorImage;
 use zip::ZipArchive;
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::fs;
-
 use crate::error::Error;
+
+#[allow(dead_code)]
+enum Direction {
+    Current,
+    Next,
+    Prev,
+    Offset(usize),
+}
 
 trait File {
     fn is_eof(&self) -> bool;
@@ -32,6 +37,17 @@ impl File for NoFile {
 struct ZipFile<R> {
     idx: usize,
     file: ZipArchive<R>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl TryFrom<&PathBuf> for ZipFile<std::fs::File> {
+    type Error = Error;
+
+    fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
+        let file = std::fs::File::open(path)?;
+        let file = ZipArchive::new(file)?;
+        Ok(Self { idx: 0, file })
+    }
 }
 
 impl<R> File for ZipFile<R>
@@ -99,14 +115,18 @@ use nest::NestFile;
 mod nest {
     use super::*;
 
+    use std::fs;
+
     pub(super) struct NestFile {
         idx: usize,
         file: Box<[PathBuf]>,
         child: Box<dyn File>,
     }
 
-    impl NestFile {
-        pub(super) fn try_from_path(path: &PathBuf) -> Result<Self, Error> {
+    impl TryFrom<&PathBuf> for NestFile {
+        type Error = Error;
+
+        fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
             let mut files = Vec::new();
             visit_dirs(path, &mut |p| files.push(p))?;
 
@@ -116,7 +136,9 @@ mod nest {
                 child: Box::new(NoFile),
             })
         }
+    }
 
+    impl NestFile {
         fn _is_eof(&self) -> bool {
             self.idx + 1 == self.file.len()
         }
@@ -127,7 +149,6 @@ mod nest {
             self._is_eof() && self.child.is_eof()
         }
 
-        #[inline(never)]
         fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
             if !self.child.is_eof() {
                 return self.child.read(buf, direction);
@@ -150,17 +171,17 @@ mod nest {
             if !path.is_file() {
                 assert!(path.is_dir());
 
-                self.child = Box::new(NestFile::try_from_path(path)?) as _;
+                self.child = Box::new(NestFile::try_from(path)?) as _;
 
                 return self.read(buf, direction);
             }
-
-            let mut file = fs::File::open(path)?;
 
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
             match ext {
                 "jpg" | "jpeg" | "png" => {
+                    let mut file = fs::File::open(path)?;
+
                     if let Ok(meta) = file.metadata() {
                         buf.reserve(meta.len() as usize);
                     }
@@ -171,12 +192,28 @@ mod nest {
                 // zip archive would return a format error for all files that are not supported.
                 // TODO: add special error handling for determined non zip files.
                 _ => {
-                    let file = ZipArchive::new(file)?;
-                    self.child = Box::new(ZipFile { idx: 0, file });
+                    self.child = Box::new(ZipFile::try_from(path)?) as _;
                     self.read(buf, direction)
                 }
             }
         }
+    }
+
+    #[inline(never)]
+    fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    visit_dirs(&path, cb)?;
+                } else {
+                    cb(path);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -207,14 +244,11 @@ impl FileObj {
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn try_first(
         &mut self,
-        file: impl AsRef<[u8]> + 'static,
+        buf: impl AsRef<[u8]> + 'static,
     ) -> Result<Option<ColorImage>, Error> {
-        let file = ZipArchive::new(std::io::Cursor::new(file))?;
-        let file = Box::new(ZipFile { idx: 0, file }) as _;
-
-        self.file = file;
+        let file = ZipArchive::new(std::io::Cursor::new(buf))?;
+        self.file = Box::new(ZipFile { idx: 0, file }) as _;
         self.buf.clear();
-
         self.try_read(Direction::Current)
     }
 
@@ -240,11 +274,9 @@ impl FileObj {
         let path = &self.directory_hint;
 
         self.file = if path.is_dir() {
-            Box::new(NestFile::try_from_path(path)?) as _
+            Box::new(NestFile::try_from(path)?) as _
         } else {
-            let file = fs::File::open(&path)?;
-            let file = ZipArchive::new(file)?;
-            Box::new(ZipFile { idx: 0, file }) as _
+            Box::new(ZipFile::try_from(path)?) as _
         };
 
         Ok(())
@@ -282,32 +314,6 @@ impl FileObj {
     }
 }
 
-#[allow(dead_code)]
-enum Direction {
-    Current,
-    Next,
-    Prev,
-    Offset(usize),
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[inline(never)]
-fn visit_dirs(dir: &PathBuf, cb: &mut dyn FnMut(PathBuf)) -> Result<(), Error> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                visit_dirs(&path, cb)?;
-            } else {
-                cb(path);
-            }
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 #[inline(never)]
 fn next_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
@@ -315,7 +321,7 @@ fn next_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
         Some(p) => {
             assert!(p.is_dir());
 
-            let mut entries = fs::read_dir(p)?;
+            let mut entries = std::fs::read_dir(p)?;
 
             for entry in entries.by_ref() {
                 let entry = entry?;
