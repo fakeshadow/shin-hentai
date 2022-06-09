@@ -9,7 +9,7 @@ repository = "https://github.com/fakeshadow/shin-hentai"
 
 [[bin]]
 name = "shin_hentai_bin"
-path = "src/main.rs"
+path = "src/app.rs"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -20,6 +20,7 @@ rfd = { version = "0.8.2" }
 image = { version = "0.24.2", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mimalloc = { version = "0.1.29", default-features = false }
 winit = { version = "0.26.1", default-features = false }
 flate2 = { version = "1.0.24", default-features = false, features = ["zlib-ng"] }
 zip = { version = "0.6.2" }
