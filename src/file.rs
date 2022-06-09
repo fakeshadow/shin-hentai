@@ -10,7 +10,7 @@ use crate::error::Error;
 
 #[allow(dead_code)]
 enum Direction {
-    Current,
+    First,
     Next,
     Prev,
     Offset(usize),
@@ -55,12 +55,12 @@ where
     R: Read + Seek,
 {
     fn is_eof(&self) -> bool {
-        self.idx + 1 == self.file.len()
+        self.idx == self.file.len().saturating_sub(1)
     }
 
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
         match direction {
-            Direction::Next | Direction::Current => {
+            Direction::Next | Direction::First => {
                 while !self.is_eof() {
                     if matches!(direction, Direction::Next) {
                         self.idx += 1;
@@ -74,7 +74,7 @@ where
                         return Ok(());
                     }
 
-                    if matches!(direction, Direction::Current) {
+                    if matches!(direction, Direction::First) {
                         self.idx += 1;
                     }
                 }
@@ -140,7 +140,11 @@ mod nest {
 
     impl NestFile {
         fn _is_eof(&self) -> bool {
-            self.idx + 1 == self.file.len()
+            self.idx == self.file.len().saturating_sub(1)
+        }
+
+        fn _is_head(&self) -> bool {
+            self.idx == 0
         }
     }
 
@@ -156,14 +160,14 @@ mod nest {
 
             match direction {
                 Direction::Next if self._is_eof() => return Ok(()),
-                Direction::Prev if self.idx == 0 => return Ok(()),
+                Direction::Prev if self._is_head() => return Ok(()),
                 Direction::Next => self.idx += 1,
                 Direction::Prev => self.idx -= 1,
                 Direction::Offset(idx) => {
-                    assert!(idx < self.file.len());
+                    assert!(!self._is_eof());
                     self.idx = idx;
                 }
-                Direction::Current => {}
+                Direction::First => {}
             }
 
             let path = &self.file[self.idx];
@@ -173,7 +177,7 @@ mod nest {
 
                 self.child = Box::new(NestFile::try_from(path)?) as _;
 
-                return self.read(buf, direction);
+                return self.read(buf, Direction::First);
             }
 
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -193,7 +197,7 @@ mod nest {
                 // TODO: add special error handling for determined non zip files.
                 _ => {
                     self.child = Box::new(ZipFile::try_from(path)?) as _;
-                    self.read(buf, direction)
+                    self.read(buf, Direction::First)
                 }
             }
         }
@@ -238,7 +242,7 @@ impl FileObj {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn try_first(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
         self.try_open(path)?;
-        self.try_read(Direction::Current)
+        self.try_read(Direction::First)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -249,7 +253,7 @@ impl FileObj {
         let file = ZipArchive::new(std::io::Cursor::new(buf))?;
         self.file = Box::new(ZipFile { idx: 0, file }) as _;
         self.buf.clear();
-        self.try_read(Direction::Current)
+        self.try_read(Direction::First)
     }
 
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
