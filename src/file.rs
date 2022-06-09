@@ -50,6 +50,51 @@ impl TryFrom<&PathBuf> for ZipFile<std::fs::File> {
     }
 }
 
+impl<R> ZipFile<R>
+where
+    R: Read + Seek,
+{
+    // a loop read auto advance the zip file index to skip nested folders inside zip file.
+    // TODO: properly handle nested folders in zip.
+    fn _read<F, F1>(
+        &mut self,
+        buf: &mut Vec<u8>,
+        mut condition: F,
+        mut on_continue: F1,
+    ) -> Result<(), Error>
+    where
+        F: FnMut(&mut Self) -> bool,
+        F1: FnMut(&mut Self),
+    {
+        while condition(self) {
+            let n = self.read_by_index(buf)?;
+
+            if n > 0 {
+                return Ok(());
+            }
+
+            on_continue(self);
+        }
+
+        Ok(())
+    }
+
+    // return Ok(n) when current index is a file and filled given buf with n bytes.
+    // (include 0 bytes).
+    fn read_by_index(&mut self, buf: &mut Vec<u8>) -> Result<usize, Error> {
+        let mut file = self.file.by_index(self.idx)?;
+
+        let n = if file.is_file() {
+            buf.reserve(file.size() as usize);
+            file.read_to_end(buf)?
+        } else {
+            0
+        };
+
+        Ok(n)
+    }
+}
+
 impl<R> File for ZipFile<R>
 where
     R: Read + Seek,
@@ -60,51 +105,46 @@ where
 
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
         match direction {
-            Direction::Next | Direction::First => {
-                while !self.is_eof() {
-                    if matches!(direction, Direction::Next) {
-                        self.idx += 1;
+            Direction::Next => self._read(
+                buf,
+                |this| {
+                    let cond = !this.is_eof();
+                    if cond {
+                        this.idx += 1;
+                    }
+                    cond
+                },
+                |_| {},
+            ),
+            Direction::First => self._read(
+                buf,
+                |this| !this.is_eof(),
+                |this| {
+                    this.idx += 1;
+                },
+            ),
+            Direction::Prev => self._read(
+                buf,
+                |this| {
+                    let cond = this.idx != 0;
+
+                    if cond {
+                        this.idx -= 1;
                     }
 
-                    let mut file = self.file.by_index(self.idx)?;
-
-                    if file.is_file() {
-                        buf.reserve(file.size() as usize);
-                        file.read_to_end(buf)?;
-                        return Ok(());
-                    }
-
-                    if matches!(direction, Direction::First) {
-                        self.idx += 1;
-                    }
-                }
-            }
-            Direction::Prev => {
-                while self.idx != 0 {
-                    self.idx -= 1;
-
-                    let mut file = self.file.by_index(self.idx)?;
-
-                    if file.is_file() {
-                        buf.reserve(file.size() as usize);
-                        file.read_to_end(buf)?;
-                        return Ok(());
-                    }
-                }
-            }
+                    cond
+                },
+                |_| {},
+            ),
             Direction::Offset(idx) => {
                 assert!(idx < self.file.len());
                 self.idx = idx;
-                let mut file = self.file.by_index(self.idx)?;
 
-                if file.is_file() {
-                    buf.reserve(file.size() as usize);
-                    file.read_to_end(buf)?;
-                }
+                let _ = self.read_by_index(buf)?;
+
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }
 
