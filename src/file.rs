@@ -11,12 +11,15 @@ use crate::error::Error;
 #[allow(dead_code)]
 enum Direction {
     First,
+    Last,
     Next,
     Prev,
     Offset(usize),
 }
 
 trait File {
+    fn is_head(&self) -> bool;
+
     fn is_eof(&self) -> bool;
 
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error>;
@@ -25,6 +28,10 @@ trait File {
 struct NoFile;
 
 impl File for NoFile {
+    fn is_head(&self) -> bool {
+        true
+    }
+
     fn is_eof(&self) -> bool {
         true
     }
@@ -99,6 +106,10 @@ impl<R> File for ZipFile<R>
 where
     R: Read + Seek,
 {
+    fn is_head(&self) -> bool {
+        self.idx == 0
+    }
+
     fn is_eof(&self) -> bool {
         self.idx == self.file.len().saturating_sub(1)
     }
@@ -144,12 +155,16 @@ where
 
                 Ok(())
             }
+            Direction::Last => {
+                self.idx = self.file.len();
+                self.read(buf, Direction::Prev)
+            }
         }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-use nest::NestFile;
+use nest::ListFile;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod nest {
@@ -157,20 +172,20 @@ mod nest {
 
     use std::fs;
 
-    pub(super) struct NestFile {
+    pub(super) struct ListFile {
         idx: usize,
         file: Box<[PathBuf]>,
         child: Box<dyn File>,
     }
 
-    impl TryFrom<&PathBuf> for NestFile {
+    impl TryFrom<&PathBuf> for ListFile {
         type Error = Error;
 
         fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
             let mut files = Vec::new();
             visit_dirs(path, &mut |p| files.push(p))?;
 
-            Ok(NestFile {
+            Ok(ListFile {
                 idx: 0,
                 file: files.into_boxed_slice(),
                 child: Box::new(NoFile),
@@ -178,7 +193,7 @@ mod nest {
         }
     }
 
-    impl NestFile {
+    impl ListFile {
         fn _is_eof(&self) -> bool {
             self.idx == self.file.len().saturating_sub(1)
         }
@@ -188,26 +203,39 @@ mod nest {
         }
     }
 
-    impl File for NestFile {
+    impl File for ListFile {
+        fn is_head(&self) -> bool {
+            self._is_head() && self.child.is_head()
+        }
+
         fn is_eof(&self) -> bool {
             self._is_eof() && self.child.is_eof()
         }
 
-        fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
-            if !self.child.is_eof() {
-                return self.child.read(buf, direction);
-            }
-
+        fn read(&mut self, buf: &mut Vec<u8>, mut direction: Direction) -> Result<(), Error> {
             match direction {
+                Direction::Next if !self.child.is_eof() => return self.child.read(buf, direction),
+                Direction::Prev if !self.child.is_head() => return self.child.read(buf, direction),
                 Direction::Next if self._is_eof() => return Ok(()),
                 Direction::Prev if self._is_head() => return Ok(()),
-                Direction::Next => self.idx += 1,
-                Direction::Prev => self.idx -= 1,
+                Direction::Next => {
+                    self.idx += 1;
+                    direction = Direction::First;
+                }
+                Direction::Prev => {
+                    self.idx -= 1;
+                    direction = Direction::Last;
+                }
+                Direction::First => {
+                    self.idx = 0;
+                }
+                Direction::Last => {
+                    self.idx = self.file.len().saturating_sub(1);
+                }
                 Direction::Offset(idx) => {
                     assert!(!self._is_eof());
                     self.idx = idx;
                 }
-                Direction::First => {}
             }
 
             let path = &self.file[self.idx];
@@ -215,9 +243,9 @@ mod nest {
             if !path.is_file() {
                 assert!(path.is_dir());
 
-                self.child = Box::new(NestFile::try_from(path)?) as _;
+                self.child = Box::new(ListFile::try_from(path)?) as _;
 
-                return self.read(buf, Direction::First);
+                return self.child.read(buf, direction);
             }
 
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -237,7 +265,7 @@ mod nest {
                 // TODO: add special error handling for determined non zip files.
                 _ => {
                     self.child = Box::new(ZipFile::try_from(path)?) as _;
-                    self.read(buf, Direction::First)
+                    self.child.read(buf, direction)
                 }
             }
         }
@@ -296,6 +324,12 @@ impl FileObj {
         self.try_read(Direction::First)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn try_last(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
+        self.try_open(path)?;
+        self.try_read(Direction::Last)
+    }
+
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
         match self.try_read(Direction::Next)? {
             #[cfg(not(target_arch = "wasm32"))]
@@ -305,12 +339,16 @@ impl FileObj {
     }
 
     pub(crate) fn try_previous(&mut self) -> Result<Option<ColorImage>, Error> {
-        self.try_read(Direction::Prev)
+        match self.try_read(Direction::Prev)? {
+            #[cfg(not(target_arch = "wasm32"))]
+            None if self.file.is_head() && self.directory_hint.exists() => self.try_previous_obj(),
+            res => Ok(res),
+        }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FileObj {
-    #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
         self.buf.clear();
         // regardless the outcome advance path to skip bad files.
@@ -318,7 +356,7 @@ impl FileObj {
         let path = &self.directory_hint;
 
         self.file = if path.is_dir() {
-            Box::new(NestFile::try_from(path)?) as _
+            Box::new(ListFile::try_from(path)?) as _
         } else {
             Box::new(ZipFile::try_from(path)?) as _
         };
@@ -326,7 +364,6 @@ impl FileObj {
         Ok(())
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn try_next_obj(&mut self) -> Result<Option<ColorImage>, Error> {
         match next_file_path(&self.directory_hint) {
             Ok(Some(path)) => self.try_first(path),
@@ -341,6 +378,22 @@ impl FileObj {
         }
     }
 
+    fn try_previous_obj(&mut self) -> Result<Option<ColorImage>, Error> {
+        match previous_file_path(&self.directory_hint) {
+            Ok(Some(path)) => self.try_last(path),
+            Ok(None) => {
+                self.directory_hint = PathBuf::default();
+                Ok(None)
+            }
+            Err(e) => {
+                self.directory_hint = PathBuf::default();
+                Err(e)
+            }
+        }
+    }
+}
+
+impl FileObj {
     fn try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
         let res = self._try_read(direction);
         self.buf.clear();
@@ -381,6 +434,33 @@ fn next_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
                 }
                 None => Ok(None),
             }
+        }
+        None => Ok(None),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[inline(never)]
+fn previous_file_path(path: &PathBuf) -> Result<Option<PathBuf>, Error> {
+    match path.parent() {
+        Some(p) => {
+            assert!(p.is_dir());
+
+            let entries = std::fs::read_dir(p)?;
+
+            let mut res = None;
+
+            for entry in entries {
+                let entry = entry?;
+                let p = entry.path();
+                if &p == path {
+                    break;
+                }
+
+                res = Some(p);
+            }
+
+            Ok(res)
         }
         None => Ok(None),
     }
