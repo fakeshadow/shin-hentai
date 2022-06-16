@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 eframe = "0.18.0"
-rfd = { version = "0.8.2" }
+rfd = { version = "0.9" }
 image = { version = "0.24.2", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -31,9 +31,9 @@ console_error_panic_hook = "0.1.6"
 zip = { version = "0.6.2", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
-resvg = "0.22.0"
+resvg = "0.23.0"
 tiny-skia = "0.6.3"
-usvg = "0.22.0"
+usvg = "0.23.0"
 
 [profile.release]
 lto = true
