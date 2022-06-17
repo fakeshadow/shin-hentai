@@ -185,6 +185,8 @@ mod nest {
             let mut files = Vec::new();
             visit_dirs(path, &mut |p| files.push(p))?;
 
+            files.sort();
+
             Ok(ListFile {
                 idx: 0,
                 file: files.into_boxed_slice(),
