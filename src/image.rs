@@ -37,12 +37,12 @@ pub(crate) fn render_image(buf: &[u8], base_res: &[u32; 2]) -> ColorImage {
                 image = image.resize(base_w, base_h, FilterType::Triangle);
             }
 
-            let image_buffer = image.to_rgba8();
-            let pixels = image_buffer.as_flat_samples();
-            ColorImage::from_rgba_unmultiplied(
-                [image.width() as _, image.height() as _],
-                pixels.as_slice(),
-            )
+            let w = image.width() as _;
+            let h = image.height() as _;
+
+            let pixels = image.into_rgba8().into_flat_samples();
+
+            ColorImage::from_rgba_unmultiplied([w, h], pixels.as_slice())
         })
         .unwrap_or_else(|_| broken())
 }
