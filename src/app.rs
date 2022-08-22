@@ -9,12 +9,8 @@ fn main() {
         ..Default::default()
     };
 
-    let size = winit::event_loop::EventLoop::new()
-        .primary_monitor()
-        .unwrap()
-        .size();
-
-    let res = [size.width, size.height];
+    // TODO: get monitor resolution somehow.
+    let res = [1920, 1080];
 
     eframe::run_native(
         "maji hentai",
