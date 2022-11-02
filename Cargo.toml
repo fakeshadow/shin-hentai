@@ -31,9 +31,9 @@ console_error_panic_hook = "0.1.6"
 zip = { version = "0.6.2", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
-resvg = "0.23.0"
-tiny-skia = "0.6.3"
-usvg = "0.23.0"
+resvg = "0.25.0"
+tiny-skia = "0.8.2"
+usvg = "0.25.0"
 
 [profile.release]
 lto = true

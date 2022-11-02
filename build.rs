@@ -61,7 +61,7 @@ fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + S
 
     let rtree = usvg::Tree::from_data(&buf, &opt.to_ref())?;
 
-    let pixmap_size = rtree.svg_node().size.to_screen_size();
+    let pixmap_size = rtree.size.to_screen_size();
     let [w, h] = [pixmap_size.width(), pixmap_size.height()];
 
     let mut map = Pixmap::new(w, h).unwrap();
