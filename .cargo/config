@@ -1,5 +1,5 @@
 [target.x86_64-unknown-linux-gnu]
-rustflags = [ "-C", "target-cpu=native" ]
+rustflags = [ "-Ctarget-cpu=native", "-Cstrip=symbols" ]
 
 [target.x86_64-pc-windows-msvc]
-rustflags = [ "-C", "target-cpu=native" ]
+rustflags = [ "-Ctarget-cpu=native", "-Cstrip=symbols" ]

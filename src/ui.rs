@@ -16,41 +16,52 @@ use crate::{error::Error, file::FileObj};
 
 pub struct UiObj {
     file: FileObj,
-    current: TextureHandle,
-    error: Option<Error>,
-    is_loading: bool,
+    state: State,
     #[cfg(target_arch = "wasm32")]
     async_value: Rc<RefCell<Option<Vec<u8>>>>,
 }
 
+enum State {
+    Loading,
+    Show(TextureHandle),
+    ShowError(Error),
+}
+
+#[cold]
+#[inline(never)]
+fn default_image_texture(ctx: &Context) -> TextureHandle {
+    ctx.load_texture(
+        "current-image",
+        crate::image::drag_drop(),
+        TextureOptions::LINEAR,
+    )
+}
+
 impl UiObj {
+    #[cold]
+    #[inline(never)]
     pub fn new(ctx: &Context, res: [u32; 2]) -> Self {
         Self {
             file: FileObj::new(res),
-            current: ctx.load_texture(
-                "current-image",
-                crate::image::drag_drop(),
-                TextureOptions::LINEAR,
-            ),
-            error: None,
-            is_loading: false,
+            state: State::Show(default_image_texture(ctx)),
             #[cfg(target_arch = "wasm32")]
             async_value: Rc::new(RefCell::new(None)),
         }
     }
 
+    #[cold]
+    #[inline(never)]
     fn set_error(&mut self, error: Error) {
-        self.error = Some(error);
-        self.is_loading = false;
+        self.state = State::ShowError(error);
     }
 
     fn set_image(&mut self, image: ColorImage, ctx: &Context) {
-        self.current = ctx.load_texture("current-image", image, TextureOptions::LINEAR);
-        self.is_loading = false;
+        self.state = State::Show(ctx.load_texture("current-image", image, TextureOptions::LINEAR));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf, ctx: &Context) -> Result<(), Error> {
+        self.state = State::Loading;
         if let Some(image) = self.file.try_first(path)? {
             self.set_image(image, ctx);
         }
@@ -59,14 +70,16 @@ impl UiObj {
 
     #[cfg(target_arch = "wasm32")]
     fn try_open(&mut self, buf: impl AsRef<[u8]> + 'static, ctx: &Context) -> Result<(), Error> {
+        self.state = State::Loading;
         if let Some(image) = self.file.try_first(buf)? {
             self.set_image(image, ctx);
         }
-
+        self.state = State::Show;
         Ok(())
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
+        self.state = State::Loading;
         if let Some(image) = self.file.try_next()? {
             self.set_image(image, ctx);
         }
@@ -74,6 +87,7 @@ impl UiObj {
     }
 
     fn try_previous(&mut self, ctx: &Context) -> Result<(), Error> {
+        self.state = State::Loading;
         if let Some(image) = self.file.try_previous()? {
             self.set_image(image, ctx);
         }
@@ -100,7 +114,6 @@ impl UiObj {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(path) = file.and_then(|file| file.path) {
-                self.is_loading = true;
                 self.try_open(path, ctx)?;
             }
         }
@@ -108,7 +121,6 @@ impl UiObj {
         #[cfg(target_arch = "wasm32")]
         {
             if let Some(bytes) = file.and_then(|file| file.bytes) {
-                self.is_loading = true;
                 self.try_open(bytes, ctx)?;
             }
         }
@@ -138,14 +150,10 @@ impl UiObj {
 
         self.render_top_bar(ctx);
 
-        CentralPanel::default().show(ctx, |ui| {
-            self.render_error(ui);
-
-            if self.is_loading {
-                self.render_loading(ui);
-            } else {
-                self.render_img(ui);
-            }
+        CentralPanel::default().show(ctx, |ui| match self.state {
+            State::ShowError(ref e) => self.render_error(format!("{e}"), ui),
+            State::Loading => self.render_loading(ui),
+            State::Show(ref handle) => Self::render_img(handle, ui),
         });
 
         Ok(())
@@ -190,9 +198,9 @@ impl UiObj {
         });
     }
 
-    fn render_img(&mut self, ui: &mut Ui) {
+    fn render_img(handle: &TextureHandle, ui: &mut Ui) {
         let window_size = ui.available_size();
-        let org_size = self.current.size_vec2();
+        let org_size = handle.size_vec2();
 
         let x_ratio = org_size.x / window_size.x;
         let y_ratio = org_size.y / window_size.y;
@@ -207,29 +215,29 @@ impl UiObj {
             [org_size.x, org_size.y]
         };
 
-        ui.centered_and_justified(|ui| ui.image(&self.current, size));
+        ui.centered_and_justified(|ui| ui.image(handle, size));
     }
 
     fn render_loading(&mut self, ui: &mut Ui) {
         ui.centered_and_justified(|ui| Spinner::default().ui(ui));
     }
 
-    fn render_error(&mut self, ui: &mut Ui) {
-        if self.error.is_some() {
-            Window::new("Error occurred")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ui.ctx(), |ui| {
-                    ui.with_layout(Layout::top_down(Align::Center), |ui| {
-                        ui.heading(format!("{}", self.error.as_ref().unwrap()));
-                        if ui.button("Confirm").clicked() {
-                            self.error = None;
-                            ui.ctx().request_repaint();
-                        }
-                    });
+    #[cold]
+    #[inline(never)]
+    fn render_error(&mut self, e: String, ui: &mut Ui) {
+        Window::new("Error occurred")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ui.ctx(), |ui| {
+                ui.with_layout(Layout::top_down(Align::Center), |ui| {
+                    ui.heading(e);
+                    if ui.button("Confirm").clicked() {
+                        self.state = State::Show(default_image_texture(ui.ctx()));
+                        ui.ctx().request_repaint();
+                    }
                 });
-        }
+            });
     }
 }
 

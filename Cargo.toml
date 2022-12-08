@@ -22,8 +22,6 @@ rfd = { version = "0.10.0" }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 image = { version = "0.24.5", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 mimalloc = { version = "0.1.32", default-features = false }
-winit = { version = "0.27.5", default-features = false }
-flate2 = { version = "1.0.25", default-features = false, features = ["zlib-ng"] }
 zip = { version = "0.6.3" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
