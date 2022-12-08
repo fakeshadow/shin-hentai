@@ -16,15 +16,48 @@ use crate::{error::Error, file::FileObj};
 
 pub struct UiObj {
     file: FileObj,
+    #[cfg(not(target_arch = "wasm32"))]
     state: State,
     #[cfg(target_arch = "wasm32")]
-    async_value: Rc<RefCell<Option<Vec<u8>>>>,
+    state: StateWasm,
 }
 
 enum State {
     Loading,
+    #[cfg(target_arch = "wasm32")]
+    Buf(Vec<u8>),
     Show(TextureHandle),
     ShowError(Error),
+}
+
+impl State {
+    fn set(&mut self, other: Self) {
+        *self = other;
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn get_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone)]
+struct StateWasm(Rc<RefCell<State>>);
+
+#[cfg(target_arch = "wasm32")]
+impl StateWasm {
+    fn new(state: State) -> Self {
+        Self(Rc::new(RefCell::new(state)))
+    }
+
+    fn set(&mut self, other: State) {
+        self.0.borrow_mut().set(other);
+    }
+
+    fn get_mut(&self) -> std::cell::RefMut<'_, State> {
+        self.0.borrow_mut()
+    }
 }
 
 #[cold]
@@ -41,27 +74,33 @@ impl UiObj {
     #[cold]
     #[inline(never)]
     pub fn new(ctx: &Context, res: [u32; 2]) -> Self {
+        let state = State::Show(default_image_texture(ctx));
         Self {
             file: FileObj::new(res),
-            state: State::Show(default_image_texture(ctx)),
+            #[cfg(not(target_arch = "wasm32"))]
+            state,
             #[cfg(target_arch = "wasm32")]
-            async_value: Rc::new(RefCell::new(None)),
+            state: StateWasm::new(state),
         }
     }
 
     #[cold]
     #[inline(never)]
     fn set_error(&mut self, error: Error) {
-        self.state = State::ShowError(error);
+        self.state.set(State::ShowError(error));
     }
 
     fn set_image(&mut self, image: ColorImage, ctx: &Context) {
-        self.state = State::Show(ctx.load_texture("current-image", image, TextureOptions::LINEAR));
+        self.state.set(State::Show(ctx.load_texture(
+            "current-image",
+            image,
+            TextureOptions::LINEAR,
+        )));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn try_open(&mut self, path: PathBuf, ctx: &Context) -> Result<(), Error> {
-        self.state = State::Loading;
+        self.state.set(State::Loading);
         if let Some(image) = self.file.try_first(path)? {
             self.set_image(image, ctx);
         }
@@ -70,16 +109,15 @@ impl UiObj {
 
     #[cfg(target_arch = "wasm32")]
     fn try_open(&mut self, buf: impl AsRef<[u8]> + 'static, ctx: &Context) -> Result<(), Error> {
-        self.state = State::Loading;
+        self.state.set(State::Loading);
         if let Some(image) = self.file.try_first(buf)? {
             self.set_image(image, ctx);
         }
-        self.state = State::Show;
         Ok(())
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
-        self.state = State::Loading;
+        self.state.set(State::Loading);
         if let Some(image) = self.file.try_next()? {
             self.set_image(image, ctx);
         }
@@ -87,7 +125,7 @@ impl UiObj {
     }
 
     fn try_previous(&mut self, ctx: &Context) -> Result<(), Error> {
-        self.state = State::Loading;
+        self.state.set(State::Loading);
         if let Some(image) = self.file.try_previous()? {
             self.set_image(image, ctx);
         }
@@ -128,35 +166,40 @@ impl UiObj {
         Ok(())
     }
 
-    // on web operations are mostly happen in async and async_value
-    // is used to pass output of async calls to Ui.
-    #[cfg(target_arch = "wasm32")]
-    fn try_listen_async(&mut self, ctx: &Context) -> Result<(), Error> {
-        let opt = self.async_value.borrow_mut().take();
-        if let Some(file) = opt {
-            let res = self.try_open(file, ctx);
-            res?;
-        }
-
-        Ok(())
-    }
-
     fn try_update(&mut self, ctx: &Context, _frame: &mut Frame) -> Result<(), Error> {
-        #[cfg(target_arch = "wasm32")]
-        self.try_listen_async(ctx)?;
-
         self.try_listen_drop(ctx)?;
         self.try_listen_input(ctx)?;
 
         self.render_top_bar(ctx);
 
-        CentralPanel::default().show(ctx, |ui| match self.state {
-            State::ShowError(ref e) => self.render_error(format!("{e}"), ui),
-            State::Loading => self.render_loading(ui),
-            State::Show(ref handle) => Self::render_img(handle, ui),
-        });
-
-        Ok(())
+        #[allow(clippy::drop_ref)]
+        CentralPanel::default()
+            .show(ctx, |ui| {
+                #[allow(unused_mut)]
+                let mut state = self.state.get_mut();
+                match *state {
+                    State::ShowError(ref e) => {
+                        let string = format!("{e}");
+                        drop(state);
+                        self.render_error(string, ui)
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    State::Buf(_) => match std::mem::replace(&mut *state, State::Loading) {
+                        State::Buf(buf) => {
+                            drop(state);
+                            self.try_open(buf, ctx)?
+                        }
+                        _ => unreachable!(),
+                    },
+                    State::Loading => {
+                        drop(state);
+                        self.render_loading(ui)
+                    }
+                    State::Show(ref handle) => Self::render_img(handle, ui),
+                }
+                Ok(())
+            })
+            .inner
     }
 
     fn render_top_bar(&mut self, ctx: &Context) {
@@ -180,12 +223,14 @@ impl UiObj {
                             // See Ui::try_listen_async for explain.
                             let fut = rfd::AsyncFileDialog::new().pick_file();
                             let ctx = ui.ctx().clone();
-                            let value = self.async_value.clone();
-                            self.is_loading = true;
+                            let mut state = self.state.clone();
+
                             wasm_bindgen_futures::spawn_local(async move {
                                 if let Some(file) = fut.await {
+                                    state.set(State::Loading);
+                                    ctx.request_repaint();
                                     let buf = file.read().await;
-                                    *value.borrow_mut() = Some(buf);
+                                    state.set(State::Buf(buf));
                                     ctx.request_repaint();
                                 }
                             })
@@ -233,7 +278,7 @@ impl UiObj {
                 ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.heading(e);
                     if ui.button("Confirm").clicked() {
-                        self.state = State::Show(default_image_texture(ui.ctx()));
+                        self.state.set(State::Show(default_image_texture(ui.ctx())));
                         ui.ctx().request_repaint();
                     }
                 });
