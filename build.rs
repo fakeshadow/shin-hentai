@@ -56,10 +56,9 @@ fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + S
 
     file.read_to_end(&mut buf)?;
 
-    let mut opt = usvg::Options::default();
-    opt.fontdb.load_system_fonts();
+    let opt = usvg::Options::default();
 
-    let rtree = usvg::Tree::from_data(&buf, &opt.to_ref())?;
+    let rtree = usvg::Tree::from_data(&buf, &opt)?;
 
     let pixmap_size = rtree.size.to_screen_size();
     let [w, h] = [pixmap_size.width(), pixmap_size.height()];

@@ -9,35 +9,35 @@ repository = "https://github.com/fakeshadow/shin-hentai"
 
 [[bin]]
 name = "shin_hentai_bin"
-path = "src/app.rs"
+path = "src/main.rs"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-eframe = "0.19.0"
+eframe = "0.20.0"
+image = { version = "0.24.5", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 rfd = { version = "0.10.0" }
-image = { version = "0.24.2", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+image = { version = "0.24.5", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 mimalloc = { version = "0.1.32", default-features = false }
-winit = { version = "0.27.1", default-features = false }
-flate2 = { version = "1.0.24", default-features = false, features = ["zlib-ng"] }
-zip = { version = "0.6.2" }
+winit = { version = "0.27.5", default-features = false }
+flate2 = { version = "1.0.25", default-features = false, features = ["zlib-ng"] }
+zip = { version = "0.6.3" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4.30"
-console_error_panic_hook = "0.1.6"
-zip = { version = "0.6.2", default-features = false, features = ["deflate"] }
+wasm-bindgen-futures = "0.4.33"
+console_error_panic_hook = "0.1.7"
+zip = { version = "0.6.3", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
-resvg = { version = "0.26.1", default-features = false }
-tiny-skia = "0.8.2"
-usvg = { version = "0.26.1", default-features = false, features = ["system-fonts", "text"] }
+resvg = { version = "0.28.0", default-features = false }
+tiny-skia = { version = "0.8.2", default-features = false }
+usvg = { version = "0.28.0", default-features = false }
 
 [profile.release]
 lto = true
 opt-level = 3
 codegen-units = 1
 panic = "abort"
-strip = true

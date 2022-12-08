@@ -1,7 +1,7 @@
 use eframe::{
     egui::{
-        Align, Align2, CentralPanel, ColorImage, Context, Key, Layout, Spinner, TextureFilter,
-        TextureHandle, TopBottomPanel, Ui, Widget, Window,
+        Align, Align2, CentralPanel, ColorImage, Context, Key, Layout, Spinner, TextureHandle,
+        TextureOptions, TopBottomPanel, Ui, Widget, Window,
     },
     App, Frame,
 };
@@ -30,7 +30,7 @@ impl UiObj {
             current: ctx.load_texture(
                 "current-image",
                 crate::image::drag_drop(),
-                TextureFilter::default(),
+                TextureOptions::LINEAR,
             ),
             error: None,
             is_loading: false,
@@ -45,7 +45,7 @@ impl UiObj {
     }
 
     fn set_image(&mut self, image: ColorImage, ctx: &Context) {
-        self.current = ctx.load_texture("current-image", image, TextureFilter::default());
+        self.current = ctx.load_texture("current-image", image, TextureOptions::LINEAR);
         self.is_loading = false;
     }
 
