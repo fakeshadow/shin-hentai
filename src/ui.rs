@@ -117,7 +117,6 @@ impl UiObj {
     }
 
     fn try_next(&mut self, ctx: &Context) -> Result<(), Error> {
-        self.state.set(State::Loading);
         if let Some(image) = self.file.try_next()? {
             self.set_image(image, ctx);
         }
@@ -125,7 +124,6 @@ impl UiObj {
     }
 
     fn try_previous(&mut self, ctx: &Context) -> Result<(), Error> {
-        self.state.set(State::Loading);
         if let Some(image) = self.file.try_previous()? {
             self.set_image(image, ctx);
         }
