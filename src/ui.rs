@@ -1,7 +1,7 @@
 use eframe::{
     egui::{
-        Align, Align2, CentralPanel, ColorImage, Context, Key, Layout, Spinner, TextureHandle,
-        TextureOptions, TopBottomPanel, Ui, Widget, Window,
+        Align, Align2, CentralPanel, ColorImage, Context, Key, KeyboardShortcut, Layout, Modifiers,
+        Spinner, TextureHandle, TextureOptions, TopBottomPanel, Ui, Widget, Window,
     },
     App, Frame,
 };
@@ -16,6 +16,7 @@ use crate::{error::Error, file::FileObj};
 
 pub struct UiObj {
     file: FileObj,
+    show_navi: bool,
     #[cfg(not(target_arch = "wasm32"))]
     state: State,
     #[cfg(target_arch = "wasm32")]
@@ -77,6 +78,7 @@ impl UiObj {
         let state = State::Show(default_image_texture(ctx));
         Self {
             file: FileObj::new(res),
+            show_navi: false,
             #[cfg(not(target_arch = "wasm32"))]
             state,
             #[cfg(target_arch = "wasm32")]
@@ -130,18 +132,44 @@ impl UiObj {
         Ok(())
     }
 
-    fn try_listen_input(&mut self, ctx: &Context) -> Result<(), Error> {
-        let scroll = ctx.input().scroll_delta;
-        let arrow_up = ctx.input().key_pressed(Key::W);
-        let arrow_down = ctx.input().key_pressed(Key::S);
-
-        if scroll.y < -10.0 || arrow_down {
-            self.try_next(ctx)?;
-        } else if scroll.y > 10.0 || arrow_up {
-            self.try_previous(ctx)?;
+    fn try_rewind(&mut self, ctx: &Context) -> Result<(), Error> {
+        if let Some(image) = self.file.try_rewind()? {
+            self.set_image(image, ctx);
         }
-
         Ok(())
+    }
+
+    fn try_skip(&mut self, ctx: &Context) -> Result<(), Error> {
+        if let Some(image) = self.file.try_skip()? {
+            self.set_image(image, ctx);
+        }
+        Ok(())
+    }
+
+    fn try_listen_input(&mut self, ctx: &Context) -> Result<(), Error> {
+        const CTRL_W: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::W);
+        const CTRL_S: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::S);
+
+        let rewind = ctx.input_mut().consume_shortcut(&CTRL_W);
+        let skip = ctx.input_mut().consume_shortcut(&CTRL_S);
+
+        if rewind {
+            self.try_rewind(ctx)
+        } else if skip {
+            self.try_skip(ctx)
+        } else {
+            let scroll = ctx.input().scroll_delta;
+            let arrow_up = ctx.input().key_pressed(Key::W);
+            let arrow_down = ctx.input().key_pressed(Key::S);
+
+            if scroll.y < -10.0 || arrow_down {
+                self.try_next(ctx)?;
+            } else if scroll.y > 10.0 || arrow_up {
+                self.try_previous(ctx)?;
+            }
+
+            Ok(())
+        }
     }
 
     fn try_listen_drop(&mut self, ctx: &Context) -> Result<(), Error> {
@@ -173,6 +201,7 @@ impl UiObj {
         #[allow(clippy::drop_ref)]
         CentralPanel::default()
             .show(ctx, |ui| {
+                self.render_navi(ui);
                 #[allow(unused_mut)]
                 let mut state = self.state.get_mut();
                 match *state {
@@ -204,39 +233,37 @@ impl UiObj {
         TopBottomPanel::top("control-bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.visuals_mut().button_frame = false;
-                ui.menu_button("💻 Menu", |ui| {
-                    ui.set_style(ui.ctx().style());
-                    if ui.button("📂 Open").clicked() {
-                        #[cfg(not(target_arch = "wasm32"))]
-                        {
-                            if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                if let Err(e) = self.try_open(path, ui.ctx()) {
-                                    self.set_error(e);
-                                }
+                if ui.button("📂 Open").clicked() {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            if let Err(e) = self.try_open(path, ui.ctx()) {
+                                self.set_error(e);
                             }
                         }
-
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            // See Ui::try_listen_async for explain.
-                            let fut = rfd::AsyncFileDialog::new().pick_file();
-                            let ctx = ui.ctx().clone();
-                            let mut state = self.state.clone();
-
-                            wasm_bindgen_futures::spawn_local(async move {
-                                if let Some(file) = fut.await {
-                                    state.set(State::Loading);
-                                    ctx.request_repaint();
-                                    let buf = file.read().await;
-                                    state.set(State::Buf(buf));
-                                    ctx.request_repaint();
-                                }
-                            })
-                        }
-
-                        ui.close_menu();
                     }
-                });
+
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        // See Ui::try_listen_async for explain.
+                        let fut = rfd::AsyncFileDialog::new().pick_file();
+                        let ctx = ui.ctx().clone();
+                        let mut state = self.state.clone();
+
+                        wasm_bindgen_futures::spawn_local(async move {
+                            if let Some(file) = fut.await {
+                                state.set(State::Loading);
+                                ctx.request_repaint();
+                                let buf = file.read().await;
+                                state.set(State::Buf(buf));
+                                ctx.request_repaint();
+                            }
+                        })
+                    }
+                }
+                if ui.button("⏩ Navi").clicked() {
+                    self.show_navi = !self.show_navi;
+                };
             });
         });
     }
@@ -263,6 +290,44 @@ impl UiObj {
 
     fn render_loading(&mut self, ui: &mut Ui) {
         ui.centered_and_justified(|ui| Spinner::default().ui(ui));
+    }
+
+    fn render_navi(&mut self, ui: &mut Ui) {
+        if self.show_navi {
+            Window::new("navigator")
+                .collapsible(true)
+                .title_bar(false)
+                .frame(eframe::egui::Frame::popup(ui.style()).multiply_with_opacity(0.3))
+                .anchor(Align2::CENTER_TOP, [0.0, 3.0])
+                .show(ui.ctx(), |ui| {
+                    ui.with_layout(Layout::left_to_right(Align::TOP), |ui| {
+                        if ui.button("⏮").clicked() {
+                            if let Err(e) = self.try_rewind(ui.ctx()) {
+                                self.set_error(e);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                        if ui.button("◀").clicked() {
+                            if let Err(e) = self.try_previous(ui.ctx()) {
+                                self.set_error(e);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                        if ui.button("▶").clicked() {
+                            if let Err(e) = self.try_next(ui.ctx()) {
+                                self.set_error(e);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                        if ui.button("⏭").clicked() {
+                            if let Err(e) = self.try_skip(ui.ctx()) {
+                                self.set_error(e);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    })
+                });
+        }
     }
 
     #[cold]

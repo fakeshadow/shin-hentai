@@ -235,7 +235,6 @@ mod nest {
                     self.idx = self.file.len().saturating_sub(1);
                 }
                 Direction::Offset(idx) => {
-                    assert!(!self._is_eof());
                     self.idx = idx;
                 }
             }
@@ -340,12 +339,20 @@ impl FileObj {
         }
     }
 
+    pub(crate) fn try_skip(&mut self) -> Result<Option<ColorImage>, Error> {
+        self.try_read(Direction::Last)
+    }
+
     pub(crate) fn try_previous(&mut self) -> Result<Option<ColorImage>, Error> {
         match self.try_read(Direction::Prev)? {
             #[cfg(not(target_arch = "wasm32"))]
             None if self.file.is_head() && self.directory_hint.exists() => self.try_previous_obj(),
             res => Ok(res),
         }
+    }
+
+    pub(crate) fn try_rewind(&mut self) -> Result<Option<ColorImage>, Error> {
+        self.try_read(Direction::Offset(0))
     }
 }
 
