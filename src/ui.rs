@@ -6,9 +6,6 @@ use eframe::{
     App, Frame,
 };
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::path::PathBuf;
-
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, rc::Rc};
 
@@ -101,7 +98,7 @@ impl UiObj {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn try_open(&mut self, path: PathBuf, ctx: &Context) -> Result<(), Error> {
+    fn try_open(&mut self, path: std::path::PathBuf, ctx: &Context) -> Result<(), Error> {
         self.state.set(State::Loading);
         if let Some(image) = self.file.try_first(path)? {
             self.set_image(image, ctx);
@@ -231,7 +228,7 @@ impl UiObj {
 
     fn render_top_bar(&mut self, ctx: &Context) {
         TopBottomPanel::top("control-bar").show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
+            ui.horizontal(|ui| {
                 ui.visuals_mut().button_frame = false;
                 if ui.button("📂 Open").clicked() {
                     #[cfg(not(target_arch = "wasm32"))]
