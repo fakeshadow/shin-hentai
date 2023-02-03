@@ -43,6 +43,7 @@ impl File for NoFile {
 
 struct ZipFile<R> {
     idx: usize,
+    ordered_names: Box<[Box<str>]>,
     file: ZipArchive<R>,
 }
 
@@ -53,7 +54,13 @@ impl TryFrom<&PathBuf> for ZipFile<std::fs::File> {
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let file = std::fs::File::open(path)?;
         let file = ZipArchive::new(file)?;
-        Ok(Self { idx: 0, file })
+        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
+        ordered_names.sort();
+        Ok(Self {
+            idx: 0,
+            ordered_names,
+            file,
+        })
     }
 }
 
@@ -89,7 +96,8 @@ where
     // return Ok(n) when current index is a file and filled given buf with n bytes.
     // (include 0 bytes).
     fn read_by_index(&mut self, buf: &mut Vec<u8>) -> Result<usize, Error> {
-        let mut file = self.file.by_index(self.idx)?;
+        let name = &*self.ordered_names[self.idx];
+        let mut file = self.file.by_name(name)?;
 
         let n = if file.is_file() {
             buf.reserve(file.size() as usize);
@@ -111,7 +119,7 @@ where
     }
 
     fn is_eof(&self) -> bool {
-        self.idx == self.file.len().saturating_sub(1)
+        self.idx == self.ordered_names.len().saturating_sub(1)
     }
 
     fn read(&mut self, buf: &mut Vec<u8>, direction: Direction) -> Result<(), Error> {
@@ -148,7 +156,7 @@ where
                 |_| {},
             ),
             Direction::Offset(idx) => {
-                assert!(idx < self.file.len());
+                assert!(idx < self.ordered_names.len());
                 self.idx = idx;
 
                 let _ = self.read_by_index(buf)?;
@@ -156,7 +164,7 @@ where
                 Ok(())
             }
             Direction::Last => {
-                self.idx = self.file.len();
+                self.idx = self.ordered_names.len();
                 self.read(buf, Direction::Prev)
             }
         }
