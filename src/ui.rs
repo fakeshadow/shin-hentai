@@ -147,30 +147,31 @@ impl UiObj {
         const CTRL_W: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::W);
         const CTRL_S: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::S);
 
-        let rewind = ctx.input_mut().consume_shortcut(&CTRL_W);
-        let skip = ctx.input_mut().consume_shortcut(&CTRL_S);
+        let (rewind, skip, scroll, arrow_up, arrow_down) = ctx.input_mut(|s| {
+            (
+                s.consume_shortcut(&CTRL_W),
+                s.consume_shortcut(&CTRL_S),
+                s.scroll_delta,
+                s.key_pressed(Key::W),
+                s.key_pressed(Key::S),
+            )
+        });
 
         if rewind {
-            self.try_rewind(ctx)
+            self.try_rewind(ctx)?;
         } else if skip {
-            self.try_skip(ctx)
-        } else {
-            let scroll = ctx.input().scroll_delta;
-            let arrow_up = ctx.input().key_pressed(Key::W);
-            let arrow_down = ctx.input().key_pressed(Key::S);
-
-            if scroll.y < -10.0 || arrow_down {
-                self.try_next(ctx)?;
-            } else if scroll.y > 10.0 || arrow_up {
-                self.try_previous(ctx)?;
-            }
-
-            Ok(())
+            self.try_skip(ctx)?;
+        } else if scroll.y < -10.0 || arrow_down {
+            self.try_next(ctx)?;
+        } else if scroll.y > 10.0 || arrow_up {
+            self.try_previous(ctx)?;
         }
+
+        Ok(())
     }
 
     fn try_listen_drop(&mut self, ctx: &Context) -> Result<(), Error> {
-        let file = ctx.input_mut().raw.dropped_files.pop();
+        let file = ctx.input_mut(|s| s.raw.dropped_files.pop());
 
         #[cfg(not(target_arch = "wasm32"))]
         {

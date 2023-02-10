@@ -16,7 +16,8 @@ fn main() {
         "maji_hentai",
         options,
         Box::new(move |ctx| Box::new(UiObj::new(&ctx.egui_ctx, res))),
-    );
+    )
+    .unwrap();
 }
 
 #[cfg(target_arch = "wasm32")]

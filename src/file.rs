@@ -328,7 +328,14 @@ impl FileObj {
         buf: impl AsRef<[u8]> + 'static,
     ) -> Result<Option<ColorImage>, Error> {
         let file = ZipArchive::new(std::io::Cursor::new(buf))?;
-        self.file = Box::new(ZipFile { idx: 0, file }) as _;
+        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
+        ordered_names.sort();
+
+        self.file = Box::new(ZipFile {
+            idx: 0,
+            ordered_names,
+            file,
+        }) as _;
         self.buf.clear();
         self.try_read(Direction::First)
     }
