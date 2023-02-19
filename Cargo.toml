@@ -20,7 +20,6 @@ image = { version = "0.24.5", default-features = false, features = ["bmp", "hdr"
 rfd = { version = "0.11.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-image = { version = "0.24.5", default-features = false, features = ["bmp", "hdr", "ico", "jpeg_rayon"] }
 zip = { version = "0.6.3" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
