@@ -15,34 +15,31 @@ fn generate_image() -> Result<(), Box<dyn error::Error + Send + Sync>> {
     let mut buf = Vec::new();
 
     let map = render_svg("./resource/broken-image.svg")?;
-    buf.extend_from_slice(
-        format!(
+    let string = format!(
         "pub const BROKEN_IMAGE: &[u8] = &{:?};pub const BROKEN_IMAGE_SIZE: [usize; 2] = [{}, {}];",
         map.data(),
         map.width() as usize,
         map.height() as usize
-    )
-        .as_bytes(),
     );
+    buf.extend_from_slice(string.as_bytes());
 
     let map = render_svg("./resource/shin-hentai.svg")?;
-    buf.extend_from_slice(
-        format!(
-            "pub const ICON_IMAGE: &[u8] = &{:?};pub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
-            map.data(),
-            map.width(),
-            map.height()
-        )
-        .as_bytes(),
+    let string = format!(
+        "pub const ICON_IMAGE: &[u8] = &{:?};pub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
+        map.data(),
+        map.width(),
+        map.height()
     );
+    buf.extend_from_slice(string.as_bytes());
 
     let map = render_svg("./resource/drag-drop.svg")?;
-    buf.extend_from_slice(format!(
+    let string = format!(
         "pub const DRAG_DROP_IMAGE: &[u8] = &{:?};pub const DRAG_DROP_IMAGE_SIZE: [usize; 2] = [{}, {}];",
         map.data(),
         map.width() as usize,
         map.height() as usize
-    ).as_bytes());
+    );
+    buf.extend_from_slice(string.as_bytes());
 
     fs::write(path, &buf)?;
 
@@ -51,6 +48,8 @@ fn generate_image() -> Result<(), Box<dyn error::Error + Send + Sync>> {
 
 fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + Send + Sync>> {
     let mut buf = Vec::new();
+
+    let path = path.as_ref();
 
     let mut file = fs::File::open(path)?;
 
@@ -63,15 +62,15 @@ fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + S
     let pixmap_size = rtree.size.to_screen_size();
     let [w, h] = [pixmap_size.width(), pixmap_size.height()];
 
-    let mut map = Pixmap::new(w, h).unwrap();
-
-    resvg::render(
-        &rtree,
-        usvg::FitTo::Original,
-        tiny_skia::Transform::default(),
-        map.as_mut(),
-    )
-    .unwrap();
-
-    Ok(map)
+    Pixmap::new(w, h)
+        .and_then(|mut map| {
+            resvg::render(
+                &rtree,
+                usvg::FitTo::Original,
+                tiny_skia::Transform::default(),
+                map.as_mut(),
+            )
+            .map(|_| map)
+        })
+        .ok_or_else(|| format!("can not render svg from path: {path:?}",).into())
 }
