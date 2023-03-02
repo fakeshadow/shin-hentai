@@ -316,36 +316,6 @@ impl FileObj {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn try_first(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
-        self.try_open(path)?;
-        self.try_read(Direction::First)
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn try_first(
-        &mut self,
-        buf: impl AsRef<[u8]> + 'static,
-    ) -> Result<Option<ColorImage>, Error> {
-        let file = ZipArchive::new(std::io::Cursor::new(buf))?;
-        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
-        ordered_names.sort();
-
-        self.file = Box::new(ZipFile {
-            idx: 0,
-            ordered_names,
-            file,
-        }) as _;
-        self.buf.clear();
-        self.try_read(Direction::First)
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn try_last(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
-        self.try_open(path)?;
-        self.try_read(Direction::Last)
-    }
-
     pub(crate) fn try_next(&mut self) -> Result<Option<ColorImage>, Error> {
         match self.try_read(Direction::Next)? {
             #[cfg(not(target_arch = "wasm32"))]
@@ -369,10 +339,36 @@ impl FileObj {
     pub(crate) fn try_rewind(&mut self) -> Result<Option<ColorImage>, Error> {
         self.try_read(Direction::Offset(0))
     }
+
+    fn try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
+        let res = self._try_read(direction);
+        self.buf.clear();
+        res
+    }
+
+    fn _try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
+        self.file.read(&mut self.buf, direction)?;
+
+        if self.buf.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(crate::image::render_image(&self.buf, &self.res)))
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FileObj {
+    pub(crate) fn try_first(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
+        self.try_open(path)?;
+        self.try_read(Direction::First)
+    }
+
+    pub(crate) fn try_last(&mut self, path: PathBuf) -> Result<Option<ColorImage>, Error> {
+        self.try_open(path)?;
+        self.try_read(Direction::Last)
+    }
+
     fn try_open(&mut self, path: PathBuf) -> Result<(), Error> {
         self.buf.clear();
         // regardless the outcome advance path to skip bad files.
@@ -417,21 +413,23 @@ impl FileObj {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl FileObj {
-    fn try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
-        let res = self._try_read(direction);
+    pub(crate) fn try_first(
+        &mut self,
+        buf: impl AsRef<[u8]> + 'static,
+    ) -> Result<Option<ColorImage>, Error> {
+        let file = ZipArchive::new(std::io::Cursor::new(buf))?;
+        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
+        ordered_names.sort();
+
+        self.file = Box::new(ZipFile {
+            idx: 0,
+            ordered_names,
+            file,
+        }) as _;
         self.buf.clear();
-        res
-    }
-
-    fn _try_read(&mut self, direction: Direction) -> Result<Option<ColorImage>, Error> {
-        self.file.read(&mut self.buf, direction)?;
-
-        if self.buf.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(crate::image::render_image(&self.buf, &self.res)))
-        }
+        self.try_read(Direction::First)
     }
 }
 
