@@ -205,6 +205,7 @@ impl UiObj {
                 match *state {
                     State::ShowError(ref e) => {
                         let string = format!("{e}");
+                        #[allow(dropping_references)]
                         drop(state);
                         self.render_error(string, ui)
                     }
@@ -217,6 +218,7 @@ impl UiObj {
                         _ => unreachable!(),
                     },
                     State::Loading => {
+                        #[allow(dropping_references)]
                         drop(state);
                         self.render_loading(ui)
                     }
