@@ -5,7 +5,7 @@ a simple comic viewer
 [WebAssembly](https://fakeshadow.github.io/)
 
 ## Requirement:
-- Rust 1.65.0
+- Rust 1.70
 
 ## Supported platform:
 - Linux
