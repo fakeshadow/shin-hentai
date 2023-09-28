@@ -1,7 +1,8 @@
 use eframe::{
     egui::{
-        Align, Align2, CentralPanel, ColorImage, Context, Key, KeyboardShortcut, Layout, Modifiers,
-        Spinner, TextureHandle, TextureOptions, TopBottomPanel, Ui, Widget, Window,
+        load::SizedTexture, Align, Align2, CentralPanel, ColorImage, Context, Key,
+        KeyboardShortcut, Layout, Modifiers, Spinner, TextureHandle, TextureOptions,
+        TopBottomPanel, Ui, Widget, Window,
     },
     App, Frame,
 };
@@ -196,7 +197,7 @@ impl UiObj {
 
         self.render_top_bar(ctx);
 
-        #[allow(clippy::drop_ref)]
+        #[allow(dropping_references)]
         CentralPanel::default()
             .show(ctx, |ui| {
                 self.render_navi(ui);
@@ -283,14 +284,14 @@ impl UiObj {
             [org_size.x, org_size.y]
         };
 
-        ui.centered_and_justified(|ui| ui.image(handle, size));
+        ui.centered_and_justified(|ui| ui.image(SizedTexture::new(handle.id(), size)));
     }
 
     fn render_loading(&mut self, ui: &mut Ui) {
         ui.centered_and_justified(|ui| Spinner::default().ui(ui));
     }
 
-    fn render_navi(&mut self, ui: &mut Ui) {
+    fn render_navi(&mut self, ui: &Ui) {
         if self.show_navi {
             Window::new("navigator")
                 .collapsible(true)
@@ -330,7 +331,7 @@ impl UiObj {
 
     #[cold]
     #[inline(never)]
-    fn render_error(&mut self, e: String, ui: &mut Ui) {
+    fn render_error(&mut self, e: String, ui: &Ui) {
         Window::new("Error occurred")
             .collapsible(false)
             .resizable(false)
