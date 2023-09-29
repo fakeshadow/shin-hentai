@@ -26,7 +26,7 @@ fn generate_image() -> Result<(), Box<dyn error::Error + Send + Sync>> {
 
     let map = render_svg("./resource/shin-hentai.svg")?;
     let string = format!(
-        "pub const ICON_IMAGE: &[u8] = &{:?};pub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
+        "#[allow(dead_code)]pub const ICON_IMAGE: &[u8] = &{:?};#[allow(dead_code)]pub const ICON_IMAGE_SIZE: [u32; 2] = [{}, {}];",
         map.data(),
         map.width(),
         map.height()
