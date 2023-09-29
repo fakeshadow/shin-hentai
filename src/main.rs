@@ -1,41 +1,42 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use eframe::CreationContext;
 use shin_hentai::ui::UiObj;
 
-#[cfg(not(target_arch = "wasm32"))]
-fn main() {
-    let options = eframe::NativeOptions {
-        icon_data: Some(shin_hentai::image::icon()),
-        ..Default::default()
-    };
+const EXPECT_MSG: &str = "failed to start shin-hentai";
 
+fn main() {
     // TODO: get monitor resolution somehow.
     let res = [1920, 1080];
 
-    eframe::run_native(
-        "maji_hentai",
-        options,
-        Box::new(move |ctx| Box::new(UiObj::new(&ctx.egui_ctx, res))),
-    )
-    .unwrap();
-}
+    let name = "maji_hentai";
 
-#[cfg(target_arch = "wasm32")]
-fn main() {
-    // Make sure panics are logged using `console.error`.
-    console_error_panic_hook::set_once();
+    let creator =
+        Box::new(move |ctx: &CreationContext| Box::new(UiObj::new(&ctx.egui_ctx, res)) as _);
 
-    // TODO: get monitor resolution somehow.
-    let res = [1920, 1080];
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        eframe::run_native(
+            name,
+            eframe::NativeOptions {
+                icon_data: Some(shin_hentai::image::icon()),
+                ..Default::default()
+            },
+            creator,
+        )
+        .expect(EXPECT_MSG);
+    }
 
-    wasm_bindgen_futures::spawn_local(async move {
-        eframe::WebRunner::new()
-            .start(
-                "maji_hentai",
-                eframe::WebOptions::default(),
-                Box::new(move |ctx| Box::new(UiObj::new(&ctx.egui_ctx, res))),
-            )
-            .await
-            .expect("failed to start shin-hentai");
-    });
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Make sure panics are logged using `console.error`.
+        console_error_panic_hook::set_once();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            eframe::WebRunner::new()
+                .start(name, eframe::WebOptions::default(), creator)
+                .await
+                .expect(EXPECT_MSG);
+        });
+    }
 }

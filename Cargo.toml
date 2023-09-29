@@ -34,7 +34,7 @@ usvg = { version = "0.35.0", default-features = false }
 
 [profile.release]
 lto = "thin"
-opt-level = 3
+opt-level = "z"
 codegen-units = 1
 panic = "abort"
 strip = true
