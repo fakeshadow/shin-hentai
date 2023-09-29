@@ -1,13 +1,14 @@
-use eframe::{egui::ColorImage, IconData};
+use eframe::egui::ColorImage;
 use image::imageops::FilterType;
 
 use crate::const_image::*;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cold]
 #[inline(never)]
-pub fn icon() -> IconData {
+pub fn icon() -> eframe::IconData {
     let [width, height] = ICON_IMAGE_SIZE;
-    IconData {
+    eframe::IconData {
         rgba: ICON_IMAGE.to_vec(),
         width,
         height,

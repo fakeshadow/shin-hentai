@@ -27,15 +27,15 @@ fn main() {
 
     // TODO: get monitor resolution somehow.
     let res = [1920, 1080];
-    let opt = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async move {
-        eframe::start_web(
-            "maji_hentai",
-            opt,
-            Box::new(move |ctx| Box::new(UiObj::new(&ctx.egui_ctx, res))),
-        )
-        .await
-        .expect("failed to start shin-hentai");
+        eframe::WebRunner::new()
+            .start(
+                "maji_hentai",
+                eframe::WebOptions::default(),
+                Box::new(move |ctx| Box::new(UiObj::new(&ctx.egui_ctx, res))),
+            )
+            .await
+            .expect("failed to start shin-hentai");
     });
 }
