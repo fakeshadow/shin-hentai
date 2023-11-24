@@ -6,9 +6,9 @@ use crate::const_image::*;
 #[cfg(not(target_arch = "wasm32"))]
 #[cold]
 #[inline(never)]
-pub fn icon() -> eframe::IconData {
+pub fn icon() -> eframe::egui::IconData {
     let [width, height] = ICON_IMAGE_SIZE;
-    eframe::IconData {
+    eframe::egui::IconData {
         rgba: ICON_IMAGE.to_vec(),
         width,
         height,

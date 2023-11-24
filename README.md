@@ -21,7 +21,7 @@ a simple comic viewer
     cd shin-hentai
     cargo build --release
     ```
-3. the compiled binary is in `target/relase/` directory with the name `shin_hentai_bin`.
+3. the compiled binary is in `target/release/` directory with the name `shin_hentai_bin`.
 
 ## Build targeting web
 1. install Rust language. Click [here](https://www.rust-lang.org/learn/get-started) to see how.
@@ -36,6 +36,30 @@ a simple comic viewer
    trunk build --release
    ```
 5. the compiled static files are in `dist` directory.
+
+## Build targeting wayland on linux
+1. Reference building process targeting desktop and use `cargo build --release --features wayland` instead of `cargo build --release`
+2. setup application file and icons. [reference](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#desktop-file-id). 
+3. Example:
+```
+location for desktop file:
+/usr/share/applications/shin_hentai_bin.desktop
+
+sample entry for desktop file:
+[Desktop Entry]
+Version=1.0
+Name=maji_hentai
+Exec=shin_hentai_bin
+Icon=shin-hentai
+Terminal=false
+Type=Application
+
+location for application icon:
+/usr/share/icons/hicolor/scalable/apps/
+
+example of copy shin-hentai icon:
+sudo cp ~/shin-hentai/resource/shin-hentai.svg /usr/share/icons/hicolor/scalable/apps/  
+```
 
 ## Control:
 - drag and drop zip file or folder to start viewing.

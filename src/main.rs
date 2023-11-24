@@ -19,7 +19,9 @@ fn main() {
         eframe::run_native(
             name,
             eframe::NativeOptions {
-                icon_data: Some(shin_hentai::image::icon()),
+                viewport: eframe::egui::ViewportBuilder::default()
+                    .with_app_id("shin_hentai_bin")
+                    .with_icon(shin_hentai::image::icon()),
                 ..Default::default()
             },
             creator,
