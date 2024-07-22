@@ -18,6 +18,7 @@ enum Direction {
 }
 
 trait File {
+    #[allow(dead_code)]
     fn is_head(&self) -> bool;
 
     fn is_eof(&self) -> bool;
@@ -54,7 +55,10 @@ impl TryFrom<&PathBuf> for ZipFile<std::fs::File> {
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let file = std::fs::File::open(path)?;
         let file = ZipArchive::new(file)?;
-        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
+        let mut ordered_names = file
+            .file_names()
+            .map(Box::from)
+            .collect::<Box<[Box<str>]>>();
         ordered_names.sort();
         Ok(Self {
             idx: 0,
@@ -420,7 +424,10 @@ impl FileObj {
         buf: impl AsRef<[u8]> + 'static,
     ) -> Result<Option<ColorImage>, Error> {
         let file = ZipArchive::new(std::io::Cursor::new(buf))?;
-        let mut ordered_names = file.file_names().map(Box::from).collect::<Box<_>>();
+        let mut ordered_names = file
+            .file_names()
+            .map(Box::from)
+            .collect::<Box<[Box<str>]>>();
         ordered_names.sort();
 
         self.file = Box::new(ZipFile {

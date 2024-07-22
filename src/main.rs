@@ -3,8 +3,6 @@
 use eframe::CreationContext;
 use shin_hentai::ui::UiObj;
 
-const EXPECT_MSG: &str = "failed to start shin-hentai";
-
 fn main() {
     // TODO: get monitor resolution somehow.
     let res = [1920, 1080];
@@ -12,7 +10,7 @@ fn main() {
     let name = "maji_hentai";
 
     let creator =
-        Box::new(move |ctx: &CreationContext| Box::new(UiObj::new(&ctx.egui_ctx, res)) as _);
+        Box::new(move |ctx: &CreationContext| Ok(Box::new(UiObj::new(&ctx.egui_ctx, res)) as _));
 
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -26,19 +24,35 @@ fn main() {
             },
             creator,
         )
-        .expect(EXPECT_MSG);
+        .expect("failed to start shin-hentai");
     }
 
     #[cfg(target_arch = "wasm32")]
     {
-        // Make sure panics are logged using `console.error`.
-        console_error_panic_hook::set_once();
+        eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-        wasm_bindgen_futures::spawn_local(async move {
-            eframe::WebRunner::new()
+        wasm_bindgen_futures::spawn_local(async {
+            let start_result = eframe::WebRunner::new()
                 .start(name, eframe::WebOptions::default(), creator)
-                .await
-                .expect(EXPECT_MSG);
+                .await;
+
+            // Remove the loading text and spinner:
+            let loading_text = eframe::web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id("loading_text"));
+            if let Some(loading_text) = loading_text {
+                match start_result {
+                    Ok(_) => {
+                        loading_text.remove();
+                    }
+                    Err(e) => {
+                        loading_text.set_inner_html(
+                            "<p> The app has crashed. See the developer console for details. </p>",
+                        );
+                        panic!("Failed to start eframe: {e:?}");
+                    }
+                }
+            }
         });
     }
 }

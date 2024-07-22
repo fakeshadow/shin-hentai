@@ -152,7 +152,7 @@ impl UiObj {
             (
                 s.consume_shortcut(&CTRL_W),
                 s.consume_shortcut(&CTRL_S),
-                s.scroll_delta,
+                s.smooth_scroll_delta,
                 s.key_pressed(Key::W),
                 s.key_pressed(Key::S),
             )
