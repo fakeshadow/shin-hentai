@@ -7,15 +7,13 @@ fn main() {
     // TODO: get monitor resolution somehow.
     let res = [1920, 1080];
 
-    let name = "maji_hentai";
-
     let creator =
         Box::new(move |ctx: &CreationContext| Ok(Box::new(UiObj::new(&ctx.egui_ctx, res)) as _));
 
     #[cfg(not(target_arch = "wasm32"))]
     {
         eframe::run_native(
-            name,
+            "maji_hentai",
             eframe::NativeOptions {
                 viewport: eframe::egui::ViewportBuilder::default()
                     .with_app_id("shin_hentai_bin")
@@ -29,18 +27,31 @@ fn main() {
 
     #[cfg(target_arch = "wasm32")]
     {
+        use eframe::wasm_bindgen::JsCast as _;
+
+        // Redirect `log` message to `console.log` and friends:
         eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
+        let web_options = eframe::WebOptions::default();
+
         wasm_bindgen_futures::spawn_local(async {
+            let document = web_sys::window()
+                .expect("No window")
+                .document()
+                .expect("No document");
+
+            let canvas = document
+                .get_element_by_id("maji_hentai")
+                .expect("Failed to find maji_hentai")
+                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .expect("maji_hentai was not a HtmlCanvasElement");
+
             let start_result = eframe::WebRunner::new()
-                .start(name, eframe::WebOptions::default(), creator)
+                .start(canvas, web_options, creator)
                 .await;
 
             // Remove the loading text and spinner:
-            let loading_text = eframe::web_sys::window()
-                .and_then(|w| w.document())
-                .and_then(|d| d.get_element_by_id("loading_text"));
-            if let Some(loading_text) = loading_text {
+            if let Some(loading_text) = document.get_element_by_id("loading_text") {
                 match start_result {
                     Ok(_) => {
                         loading_text.remove();
