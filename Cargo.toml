@@ -2,10 +2,11 @@
 name = "shin-hentai"
 default-run = "shin_hentai_bin"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 description = "a simple comic viewer"
 repository = "https://github.com/fakeshadow/shin-hentai"
+rust-version = "1.88"
 
 [[bin]]
 name = "shin_hentai_bin"

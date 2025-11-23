@@ -5,7 +5,7 @@ a simple comic viewer
 [WebAssembly](https://fakeshadow.github.io/)
 
 ## Requirement:
-- Rust 1.70
+- Rust 1.88
 
 ## Supported platform:
 - Linux
@@ -38,7 +38,6 @@ a simple comic viewer
 5. the compiled static files are in `dist` directory.
 
 ## Build targeting wayland on linux
-1. Reference building process targeting desktop and use `cargo build --release --features wayland` instead of `cargo build --release`
 2. setup application file and icons. [reference](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#desktop-file-id). 
 3. Example:
 ```
