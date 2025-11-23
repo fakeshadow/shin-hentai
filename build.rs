@@ -1,7 +1,7 @@
 use std::{env, error, fs, io::Read, path::Path};
 
 use tiny_skia::{Pixmap, Transform};
-use usvg::{Options, Tree, TreeParsing};
+use usvg::{Options, Tree};
 
 fn main() {
     generate_image().unwrap();
@@ -57,12 +57,12 @@ fn render_svg(path: impl AsRef<Path>) -> Result<Pixmap, Box<dyn error::Error + S
 
     let tree = Tree::from_data(&buf, &Options::default())?;
 
-    let pixmap_size = tree.size.to_int_size();
+    let pixmap_size = tree.size().to_int_size();
     let [w, h] = [pixmap_size.width(), pixmap_size.height()];
 
     Pixmap::new(w, h)
         .map(|mut map| {
-            resvg::Tree::from_usvg(&tree).render(Transform::default(), &mut map.as_mut());
+            resvg::render(&tree, Transform::default(), &mut map.as_mut());
             map
         })
         .ok_or_else(|| format!("can not render svg from path: {path:?}",).into())

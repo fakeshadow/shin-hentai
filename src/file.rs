@@ -264,7 +264,7 @@ mod nest {
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
             match ext {
-                "jpg" | "jpeg" | "png" => {
+                "jpg" | "jpeg" | "png" | "webp" => {
                     let mut file = fs::File::open(path)?;
 
                     if let Ok(meta) = file.metadata() {
